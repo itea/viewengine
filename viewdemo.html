@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript" src="viewengine.js"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+    <script type="text/javascript">
+function run() {
+    window.sbug = document.getElementById('sbug').textContent;
+    try { parser(sbug); } catch (e) { console.log(e.stack); }    
+}
+    </script>
+    <script type="text/bug" id="sbug">
+
+!defcomponent inputBox {
+	<div class="c-input-box"><span></span><input class="c-input-box-input" type="text"/></div>
+} {
+    this.setLabel = function ( label ) {
+        this.node.getElementsByTagName("span")[0].innerText = label;
+    };
+
+	def("disable", function () {
+		this.node.getElementsByClassName("c-input-box-input")[0].disabled = true;
+	});
+	
+	def("enable", function () {
+		this.node.getElementsByClassName("c-input-box-input")[0].disabled = false;
+	});
+}~
+
+!defcomponent outputBox {
+    <span>OutputBox</span>
+} {
+    this.setLabel = function (label) {
+        this.node.getElementsByTagName("span")[0].innerText = label;
+    };
+}~
+
+!deffield FIRST_NAME inputBox
+!deffield LAST_NAME outputBox
+
+    </script>
+</head>
+<body>
+</body>
+</html>

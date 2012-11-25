@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript" src="viewengine.js"></script>
+    <script type="text/javascript">
+var sbug = document.getElementById('sbug').textContent;
+try { parser(sbug); } catch (e) { console.log(e.stack); }    
+    </script>
+    <script type="text/bug" id="sbug">
+
+!defcomponent component {
+} {
+}~
+
+!defcomponent inputBox {
+	<div class="c-input-box"><span>$title<span><input class="c-input-box-input" type="text"/></div>
+} {
+	provide("disable", function () {
+		$(".c-input-box-input").disabled = true;
+	});
+	
+	provide("enable", function () {
+		$(".c-input-box-input").disabled = false;
+	});
+}~
+
+!defcomponent dateBox {
+	<div class="c-input-box"><span>$title<span><input class="c-input-box-input" type="text"/><input class="c-date-button" type="button"/></div>
+} {
+	provide("disable", function () {
+		$(".c-input-box-input").disabled = true;
+		$(".c-date-button").disabled = true;
+	});
+	
+	provide("enable", function () {
+		$(".c-input-box-input").disabled = false;
+		$(".c-date-button").disabled = false;
+	});
+	
+	$(".c-date-button").addEventListener("click", function () {
+		// open calendar
+	});
+}~
+
+!defcomponent dropDown {
+} {
+	provide("init", function(store, intext) {
+		// populate cvt
+	});
+}~
+!deffield APPLICATION_TYPE dropDown(RSRS_APP_TYP, "EXT")
+!deffield SALUTATION             dropDown(RB10021, "EXT")
+!deffield LAST_NAME              inputBox
+!deffield FIRST_NAME             inputBox
+!deffield TITLE                      inputBox
+!deffield NATIONLITY_CD      dropDown(DLCOUNTRY, "EXT")
+!deffield MOTHER_MAIDEN_NM inputBox
+
+!defgroup BasicData {
+	APPLICATION_TYPE
+	SALUTATION, LAST_NAME, NATIONLITY_CD : 3 2 5
+	TITLE MOTHER_MAIDEN_NM : 1 1
+
+}
+
+!defrule init {
+	*: editable optional;
+}
+
+!defrule BASIC_DATE {
+	FIRST_NAME LAST_NAME TITLE: mandatory;
+	FIRST_NAME LAST_NAME: max(30);
+	DOB_DATE: mandatory max(10) regex(/\d{4}-\d{2}-\d{2}/);
+}
+    </script>
+</head>
+<body>
+</body>
+</html>
