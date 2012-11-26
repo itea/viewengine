@@ -13,29 +13,6 @@ var
       return target;
   },
 
-  parse_group = function (input) {
-      var regx_expr = /^(\w+\s*)+(?:\s*:\s*(\d+\s*)*)?;/g,
-          regx_token = /(?=[\S\n]|$)/g,
-          position = 0, rows = [], line;
-          match;
-
-      while (true) {
-          regx_token.lastIndex = position;
-          regx_token.exec(input);
-          position = regx_token.lastIndex;
-          if (position === input.length) break;
-
-          match = regx_expr.exec( input.substring(position) );
-          if ( !match ) error( "Incorrect group format." );
-
-          line = match[1].split(/\s+/);
-          if ( match[2] ) line.unshift( match[2].split(/\s+/) );
-          rows.push( line );
-      }
-
-      return rows;
-  },
-
   parser = function (input) {
 
   var
@@ -108,7 +85,7 @@ var
 
       deffield: {
           'letter': function () {
-              var match = /^(\w+)\s+(\w+)\s*(?:\(([^\0]*?)\))?(?=\n|$)/.exec( input.substring(position_token) );
+              var match = /^(\w+)\s+(\w+)\s*(?:\(([^\0]*?)\))?;/.exec( input.substring(position_token) );
 
               if ( !match) error('Incorrect format of deffield.');
 
@@ -213,6 +190,38 @@ var
     return [ components, fields, groups, rules ];
   },
 
+  parse_group = function (input, fields, groups) {
+      var regx_expr = /^(\w+\s*)+(?:\s*:\s*(\d+\s*)*)?;/,
+          regx_token = /(?=\S|$)/g,
+          position = 0, layout = [], line,
+          match, i, len, e;
+
+      while (true) {
+          regx_token.lastIndex = position;
+          regx_token.exec(input);
+          position = regx_token.lastIndex;
+          if (position === input.length) break;
+
+          match = regx_expr.exec( input.substring(position) );
+          if ( !match ) error( "Incorrect group format." );
+          position += match[0].length;
+
+          line = match[1].split(/\s+/);
+          if ( match[2] ) layout.push( match[2].split(/\s+/) );
+          else layout.push( line.length );
+
+          for (i = 0, len = line.length; i < len; i++) {
+              e = line[i];
+              e = groups[e] || fields[e];
+              if ( !e) error( "Cannot find: " + line[i] );
+              layout.push(e);
+          }
+
+      }
+
+      return layout;
+  },
+
   defComponent = function (engine, name, inherit, view, code) {
 
       var comp = { view: view, name: name, engine: engine };
@@ -228,10 +237,20 @@ var
 
   defField = function (engine, name, component, argstr) {
 
+      var initargs;
+      if (argstr) {
+          initargs = (new Function( "return [" + argstr + "];"))();
+      }
+
       var Field = function () {
+          this.name = name;
           var node = ( this.node = document.createElement('div') );
           node.className = "-vn-field";
           node.innerHTML = this.view;
+          
+          if (this.init) {
+              this.init.apply( this, initargs || []);
+          }
       };
 
       Field.prototype = component;
@@ -239,11 +258,26 @@ var
       return Field;
   },
 
-  Group = function (engine, name, code) {
-      this.engine = engine;
-      this.name = name;
+  defGroup = function (engine, name, layout) {
 
-      console.log( "Group: " + name );
+      var Group = function () {
+          var node = ( this.node = document.createElement('div') ),
+              members = ( this.members = [] ),
+              i, len, e, field;
+          node.className = "-vn-group";
+
+          for (i = 0, len = layout.length; i < len; i++) {
+              e = layout[i];
+              if (typeof e === 'number') continue;
+
+              field = new e();
+              members.push( members[ field.name ] = field );
+
+              node.appendChild(field.node);
+          }
+      };
+
+      return Group;
   },
 
   Rule = function (engine, name, code) {
@@ -267,7 +301,7 @@ var
               fields = ls[1],
               groups = ls[2],
               rules = ls[3],
-              i, len, e, component;
+              i, len, e, component, layout;
 
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
@@ -284,7 +318,8 @@ var
 
           for (i = 0, len = groups.length; i < len; i++) {
               e = groups[i];
-              this.groups[ e[0] ] = new Group( this, e[0], e[1] );
+              layout = parse_group( e[1], this.fields, this.groups );
+              this.groups[ e[0] ] = defGroup( this, e[0], layout );
           }
 
           for (i = 0, len = rules.length; i < len; i++) {

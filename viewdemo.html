@@ -2,43 +2,108 @@
 <html>
 <head>
     <script type="text/javascript" src="viewengine.js"></script>
-    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+    <!-- <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script> -->
     <script type="text/javascript">
 function run() {
     window.sbug = document.getElementById('sbug').textContent;
-    try { parser(sbug); } catch (e) { console.log(e.stack); }    
+    window.engine = new Vngin();
+    try { engine.loadScript(sbug); } catch (e) { console.log(e.stack); }
+    var script = new engine.fields.SCRIPT();
+    document.body.appendChild(script.node);
 }
+window.addEventListener('load', function () {
+    run();
+});
+
     </script>
     <script type="text/bug" id="sbug">
 
 !defcomponent inputBox {
-	<div class="c-input-box"><span></span><input class="c-input-box-input" type="text"/></div>
+    <span class="-vnc-label"></span>
+    <input class="-vnc-input" type="text"/>
 } {
     this.setLabel = function ( label ) {
-        this.node.getElementsByTagName("span")[0].innerText = label;
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
     };
 
-	def("disable", function () {
-		this.node.getElementsByClassName("c-input-box-input")[0].disabled = true;
-	});
-	
-	def("enable", function () {
-		this.node.getElementsByClassName("c-input-box-input")[0].disabled = false;
-	});
+    this.disable = function () {
+        this.node.getElementsByClassName("-vnc-input")[0].disabled = true;
+    };
+    
+    this.enable = function () {
+        this.node.getElementsByClassName("-vnc-input")[0].disabled = false;
+    };
 }~
 
-!defcomponent outputBox {
-    <span>OutputBox</span>
+!defcomponent checkBox {
+    <input class="-vnc-checkbox" type="checkbox"/>
+    <span class="-vnc-label"></span>
 } {
     this.setLabel = function (label) {
-        this.node.getElementsByTagName("span")[0].innerText = label;
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
+    };
+
+    this.disable = function () {
+        this.node.getElementsByClassName("-vnc-checkbox")[0].disabled = true;
+    };
+    
+    this.enable = function () {
+        this.node.getElementsByClassName("-vnc-checkbox")[0].disabled = false;
     };
 }~
 
-!deffield FIRST_NAME inputBox
-!deffield LAST_NAME outputBox
+!defcomponent selectBox {
+    <span class="-vnc-label"></span>
+    <select class="-vnc-select"></select>
+} {
+    this.setLabel = function (label) {
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
+    };
 
+    this.disable = function () {
+        this.node.getElementsByClassName("-vnc-select")[0].disabled = true;
+    };
+    
+    this.enable = function () {
+        this.node.getElementsByClassName("-vnc-select")[0].disabled = false;
+    };
+}~
+
+!defcomponent scriptBox {
+    <textarea class="-vnc-textarea -vnc-scriptbox"></textarea>
+    <input class="-vnc-button" type="button" value="RUN"/>
+} {
+    this.init = function () {
+        var _this = this;
+        this.node.getElementsByClassName("-vnc-button")[0].addEventListener("click", function (evt) {
+            var script = _this.node.getElementsByClassName("-vnc-textarea")[0].value;
+            try {
+                (new Function(script)).call(window);
+            } catch (e) {
+                alert(e.msg);
+                console.log(e);
+                window._e = e;
+            }
+        });
+    };
+}~
+
+!deffield FIRST_NAME inputBox;
+!deffield LAST_NAME checkBox;
+!deffield PROVINCE selectBox;
+!deffield SCRIPT scriptBox;
+
+!defgroup min {
+    FIRST_NAME;
+    LAST_NAME;
+    PROVINCE;
+}
     </script>
+    <style type="text/css">
+.-vn-field { overflow: hidden; }
+.-vnc-scriptbox {width: 600px; height: 200px;}
+
+    </style>
 </head>
 <body>
 </body>
