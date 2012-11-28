@@ -94,9 +94,20 @@ window.addEventListener('load', function () {
 !deffield SCRIPT scriptBox;
 
 !defgroup min {
-    FIRST_NAME;
-    LAST_NAME;
-    PROVINCE;
+    {@FIRST_NAME}
+    {@LAST_NAME}
+} {
+    this.hello = function () { alert("hello"); };
+}~
+
+!defgroup max {
+    {@PROVINCE}
+    {@min}
+} {
+}~
+
+!defrule NAME_MAND {
+	FIRST_NAME LAST_NAME: mandatory;
 }
     </script>
     <style type="text/css">
