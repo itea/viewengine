@@ -5,6 +5,10 @@ var
       throw new Error(msg);
   },
 
+  trim = String.prototype.trim ?
+        function (s) { return s == null ? null : s.trim(); } :
+        function (s) { return s == null ? null : s.replace(/^\s+|\s+$/, ""); },
+
   extend = function(target, src) {
       var e;
       for (e in src) {
@@ -13,7 +17,7 @@ var
       return target;
   },
 
-  parser = function (input) {
+  parse_script = function (input) {
     var
       state = 'line',
     
@@ -31,19 +35,19 @@ var
 
       actmap = {
         line: {
-            '!defcomponent': function () {
+            '!component': function () {
                 state = 'defcomponent';
             },
             
-            '!deffield': function () {
+            '!field': function () {
                 state = 'deffield';
             },
 
-            '!defgroup': function () {
+            '!group': function () {
                 state = 'defgroup';
             },
 
-            '!defrule': function () {
+            '!rule': function () {
                 state = 'defrule';
             },
 
@@ -62,22 +66,24 @@ var
 
         defcomponent: {
             'letter': function () {
-                var match = /^(\w+)(?:\s*:\s*(\w+))?(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?:\s*:\s*(\w[\d\w]*))?(?=\s*{)/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
                 if ( !match ) error();
 
-                move_forward( position_token + match[0].length );
+                move_forward( match[0].length );
 
-                if ( !match[2] ) {
-                    viewmatch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
+                viewmatch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
+                if (viewmatch) {
                     view = viewmatch[1];
-                    move_forward( position_token + viewmatch[0].length );
+                    move_forward( viewmatch[0].length );
                 }
 
                 codematch = (/^{$([^\0]*?)^}~/m).exec( input.substring(position_token) );
-                code = codematch[1];
-                move_forward( position_token + codematch[0].length );
+                if (codematch) {
+                    code = codematch[1];
+                    move_forward( codematch[0].length );
+                }
 
                 components.push([ match[1], match[2], view, code ]);
                 state = 'line';
@@ -90,11 +96,11 @@ var
 
         deffield: {
             'letter': function () {
-                var match = /^(\w+)\s+(\w+)\s*(?:\(([^\0]*?)\))?;/.exec( input.substring(position_token) );
+                var match = /^(\w[\d\w]*)\s+(\w[\d\w]*)\s*(?:\(([^\0]*?)\))?;/.exec( input.substring(position_token) );
 
                 if ( !match) error('Incorrect format of deffield.');
 
-                move_forward( position_token + match[0].length );
+                move_forward( match[0].length );
 
                 fields.push([ match[1], match[2], match[3] ]);
                 state = 'line';
@@ -107,20 +113,24 @@ var
 
         defgroup: {
             'letter': function () {
-                var match = /^(\w+)(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?=\s*{)/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
                 if ( !match) error('Incorrect format of defgroup.');
 
-                move_forward( position_token + match[0].length );
+                move_forward( match[0].length );
 
                 viewmatch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
-                view = viewmatch[1];
-                move_forward( position_token + viewmatch[0].length );
+                if (viewmatch) {
+                    view = viewmatch[1];
+                    move_forward( viewmatch[0].length );
+                }
 
                 codematch = (/^{$([^\0]*?)^}~/m).exec( input.substring(position_token) );
-                code = codematch[1];
-                move_forward( position_token + codematch[0].length );
+                if (codematch) {
+                    code = codematch[1];
+                    move_forward( codematch[0].length );
+                }
 
                 groups.push([ match[1], view, code ]);
                 state = 'line';
@@ -133,16 +143,16 @@ var
 
         defrule: {
             'letter': function () {
-                var match = /^(\w+)(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?=\s*{)/.exec( input.substring(position_token) ),
                     code, codematch;
 
                 if ( !match) error('Incorrect format of defrule.');
 
-                move_forward( position_token + match[0].length );
+                move_forward( match[0].length );
 
                 codematch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
                 code = codematch[1];
-                move_forward( position_token + codematch[0].length );
+                move_forward( codematch[0].length );
 
                 rules.push([ match[1], codematch[1] ]);
                 state = 'line';
@@ -160,8 +170,8 @@ var
           return input.substring(position_token ).split(/\s/, 1)[0];
       },
 
-      move_forward = function ( pos ) {
-          if (pos) position = pos;
+      move_forward = function ( delta ) {
+          if (delta) position = position_token + delta;
           regx_token.lastIndex = position;
           regx_token.exec(input);
 
@@ -178,7 +188,7 @@ var
           switch (ch) {
           case '!':
               cmd = input.substring(position_token ).split(/\s/, 1)[0];
-              move_forward( position_token + cmd.length );
+              move_forward( cmd.length );
               return cmd;
           case '\n':
               return 'eol';
@@ -225,6 +235,7 @@ var
           var node = ( this.node = document.createElement('div') );
 
           this.name = name;
+          this.componentName = component.name;
           node.className = "-vn-field";
           node.innerHTML = this.view;
           
@@ -242,7 +253,7 @@ var
       if (childNodes.length === 0) return;
 
       var i, len, e, match, lastIndex, docFrag, member, text, nodes = [],
-          regx = /{\s*@(\w+)\s*}/g;
+          regx = /{\s*@(\w[\d\w]*)\s*}/g;
 
       for (i = 0, len = childNodes.length; i < len; i++) {
           nodes.push(childNodes[i]);
@@ -302,85 +313,83 @@ var
       return Group;
   },
 
+  regx_literalness = /^[\x20\t\n\r]*(?:(true|false|null|undefined)|(-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)|"((?:[^\r\n\t\\\"]|\\(?:["\\\/trnfb]|u[0-9a-fA-F]{4}))*)"|\/((?:[^\/\\]+|\\[/\\trnfb])+)\/)/,
+
+  _push_arg = function (input, args) {
+      var match = regx_literalness.exec( input );
+
+      if ( !match ) error( "Unexpected input. " );
+
+      if ( match[1] ) {
+          switch (match[1]) {
+          case 'true':
+              args.push(true);
+              break;
+          case 'false':
+              args.push(false);
+              break;
+          case 'null':
+              args.push(null);
+              break;
+          case 'undefined':
+              args.push(undefined);
+              break;
+          }
+
+      } else if ( match[2] ) { // number
+          args.push( +match[2] );
+
+      } else if ( match[3] ) { // string
+          args.push( match[3] );
+
+      } else { // regular expression
+          args.push( new RegExp (match[4]) );
+      }
+
+      return match[0].length;
+  },
+
+  parse_args = function (input, position, move_forward) {
+      var args = [], ch = input.charAt(position), len;
+      if (ch === '(') { // deal args
+          position ++;
+          move_forward(1);
+  
+          while (true) {
+              len = _push_arg(input.substring(position), args);
+              position += len;
+              ch = move_forward(len);
+              if (ch === '') error("Unexpected EOF");
+              if (ch === ',' || ch === ')') {
+                  move_forward(1);
+                  position ++;
+                  break;
+              }
+          }
+      }
+      return args;
+  },
+
   parse_rule = function (input) {
     var
       state = 'statement',
       position = 0,
-      rule = {},
+      statements = [],
 
-      init_rule_name = function (names) {
-          var i, len, name;
-          for (i = 0, len = names.length; i < len; i++) {
-              name = names[i];
-              if ( !rule[name] ) rule[name] = {};
-          }
-      },
+      parse_rule_call = function () {
+          var match, args, calls = [], ch,
+              regx_token = /(?=[\S]|$)/g;
 
-      regx_literalness = /^[\x20\t\n\r]*(?:(true|false|null|undefined)|(-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)|"((?:[^\r\n\t\\\"]|\\(?:["\\\/trnfb]|u[0-9a-fA-F]{4}))*)"|\/((?:[^\r\n\t\\\/])*)\/)/g,
-    
-      parse_rule_call = function (names) {
-          var match, args, i, len = names.length, name,
-              regx_token = /(?=[\S]|$)/g,
-
-              parse_args = function (args) {
-                  var match = regx_literalness.exec( input.substring(position) );
-
-                  if ( !match ) error( "Unexpected input. " );
-
-                  if ( match[1] ) {
-                      switch (match[1]) {
-                      case 'true':
-                          args.push(true);
-                          break;
-                      case 'false':
-                          args.push(false);
-                          break;
-                      case 'null':
-                          args.push(null);
-                          break;
-                      case 'undefined':
-                          args.push(undefined);
-                          break;
-                      }
-
-                  } else if ( match[2] ) { // number
-                      args.push( +match[2] );
-
-                  } else if ( match[3] ) { // string
-                      args.push( match[3] );
-
-                  } else { // regular expression
-                      args.push( new RegExp (match[4]) );
-                  }
-
-                  return move_forward( match[0].length );
-              };
-    
           while (true) {
-              match = /^(\w+)(?=[\s(;])/.exec( input.substring(position) );
+              match = /^([$\w][$\d\w]*)(?=[\s(;])/.exec( input.substring(position) );
               if ( !match ) error("Incorrect format of rule.");
               
               ch = move_forward( match[0].length );
               
-              args = [];
-              if (ch === '(') { // deal args
-                  position ++;
+              args = parse_args(input, position, move_forward);
 
-                  while (true) {
-                      ch = parse_args(args);
-                      if (ch === '') error("Unexpected EOF");
-                      if (ch === ',') move_forward( 1 );
-                      if (ch === ')') {
-                          position ++;
-                          break;
-                      }
-                  }
-              }
-
-              for (i = 0; i < len; i++) {
-                  name = names[i];
-                  rule[name][ match[1] ] = args;
-              }
+              calls.push( match[1] );
+              calls[ match[1] ] = args;
 
               ch = move_forward();
               if (ch === ';') {
@@ -388,23 +397,28 @@ var
                   break;
               }
           }
+
+          return calls;
       },
 
       actmap = {
         statement: {
             'letter': function () {
-                var match = /^((?:\w+\s*)+):/.exec( input.substring(position) ),
-                    names;
+                var match = /^((?:\w[\d\w]*\s*)+):/.exec( input.substring(position) ),
+                    names, calls;
                 if ( !match ) error("Incorrect format of rule.");
 
                 names = match[1].split(/\s+/);
                 if (names[names.length] === "") names.pop();
 
-                init_rule_name(names);
-
                 move_forward( match[0].length );
 
-                parse_rule_call(names);
+                calls = parse_rule_call();
+
+                statements.push({
+                    names: names,
+                    calls: calls
+                });
             },
             
             'eof': function () {
@@ -416,10 +430,6 @@ var
       
       regx_token = /(?=[\S]|$)/g,
     
-      next_token = function () {
-          return input.substring(position).split(/\s/, 1)[0];
-      },
-
       move_forward = function ( delta ) {
           if (delta) position += delta;
           regx_token.lastIndex = position;
@@ -452,13 +462,12 @@ var
           fn();
       }
 
-      return rule;
+      return statements;
   },
 
-  Rule = function (engine, name, code) {
-      // this.engine = engine;
+  Rule = function (engine, name, input) {
       this.name = name;
-      this.rule = parse_rule(code);
+      this.load(input);
   },
 
   Engine = function () {
@@ -470,12 +479,12 @@ var
 
   extend( Engine.prototype, {
       loadScript: function (input) {
-          var ls = parser(input),
+          var ls = parse_script(input),
               components = ls[0],
               fields = ls[1],
               groups = ls[2],
               rules = ls[3],
-              i, len, e, component;
+              i, len, e, ent;
 
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
@@ -484,10 +493,10 @@ var
 
           for (i = 0, len = fields.length; i < len; i++) {
               e = fields[i];
-              component = this.components[ e[1] ];
-              if ( !component ) error( "Cannot find component: " + e[1] );
+              ent = this.components[ e[1] ];
+              if ( !ent ) error( "Cannot find component: " + e[1] );
 
-              this.fields[ e[0] ] = defField( this, e[0], component, e[2] );
+              this.fields[ e[0] ] = defField( this, e[0], ent, e[2] );
           }
 
           for (i = 0, len = groups.length; i < len; i++) {
@@ -502,8 +511,14 @@ var
 
       }
   });
+
+  extend( Rule.prototype, {
+      load: function (input) {
+          this.statements = parse_rule(input);
+      }
+  });
   
-  window.parser = parser;
+  window.parse_script = parse_script;
   window.parse_rule = parse_rule;
   window.Vngin = Engine;
 

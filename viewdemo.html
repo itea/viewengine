@@ -18,7 +18,7 @@ window.addEventListener('load', function () {
     </script>
     <script type="text/bug" id="sbug">
 
-!defcomponent inputBox {
+!component inputBox {
     <span class="-vnc-label"></span>
     <input class="-vnc-input" type="text"/>
 } {
@@ -35,7 +35,7 @@ window.addEventListener('load', function () {
     };
 }~
 
-!defcomponent checkBox {
+!component checkBox {
     <input class="-vnc-checkbox" type="checkbox"/>
     <span class="-vnc-label"></span>
 } {
@@ -52,7 +52,7 @@ window.addEventListener('load', function () {
     };
 }~
 
-!defcomponent selectBox {
+!component selectBox {
     <span class="-vnc-label"></span>
     <select class="-vnc-select"></select>
 } {
@@ -69,7 +69,7 @@ window.addEventListener('load', function () {
     };
 }~
 
-!defcomponent scriptBox {
+!component scriptBox {
     <textarea class="-vnc-textarea -vnc-scriptbox"></textarea>
     <input class="-vnc-button" type="button" value="RUN"/>
 } {
@@ -88,26 +88,33 @@ window.addEventListener('load', function () {
     };
 }~
 
-!deffield FIRST_NAME inputBox;
-!deffield LAST_NAME checkBox;
-!deffield PROVINCE selectBox;
-!deffield SCRIPT scriptBox;
+!field FIRST_NAME inputBox;
+!field LAST_NAME checkBox;
+!field PROVINCE selectBox;
+!field SCRIPT scriptBox;
 
-!defgroup min {
+!group min {
     {@FIRST_NAME}
     {@LAST_NAME}
 } {
     this.hello = function () { alert("hello"); };
 }~
 
-!defgroup max {
+!group max {
     {@PROVINCE}
     {@min}
 } {
 }~
 
-!defrule NAME_MAND {
+!rule NAME_MAND {
 	FIRST_NAME LAST_NAME: mandatory;
+    PROVINCE: max(9);
+}
+
+!rule SET_LABEL {
+    FIRST_NAME: setLabel("First Name");
+    LAST_NAME:  setLabel("Last Name");
+    PROVINCE:   setLabel("Province");
 }
     </script>
     <style type="text/css">
