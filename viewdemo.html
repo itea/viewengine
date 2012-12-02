@@ -22,7 +22,11 @@ window.addEventListener('load', function () {
     <span class="-vnc-label"></span>
     <input class="-vnc-input" type="text"/>
 } {
-    this.setLabel = function ( label ) {
+    this.init = function (hello) {
+        console.log(hello);
+    };
+
+    this.label = function ( label ) {
         this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
     };
 
@@ -35,11 +39,11 @@ window.addEventListener('load', function () {
     };
 }~
 
-!component checkBox {
+!component checkBox :span {
     <input class="-vnc-checkbox" type="checkbox"/>
     <span class="-vnc-label"></span>
 } {
-    this.setLabel = function (label) {
+    this.label = function (label) {
         this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
     };
 
@@ -56,7 +60,7 @@ window.addEventListener('load', function () {
     <span class="-vnc-label"></span>
     <select class="-vnc-select"></select>
 } {
-    this.setLabel = function (label) {
+    this.label = function (label) {
         this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
     };
 
@@ -88,7 +92,9 @@ window.addEventListener('load', function () {
     };
 }~
 
-!field FIRST_NAME inputBox;
+# define fields
+
+!field FIRST_NAME inputBox("Hello");
 !field LAST_NAME checkBox;
 !field PROVINCE selectBox;
 !field SCRIPT scriptBox;
@@ -103,8 +109,7 @@ window.addEventListener('load', function () {
 !group max {
     {@PROVINCE}
     {@min}
-} {
-}~
+}
 
 !rule NAME_MAND {
 	FIRST_NAME LAST_NAME: mandatory;
@@ -112,9 +117,9 @@ window.addEventListener('load', function () {
 }
 
 !rule SET_LABEL {
-    FIRST_NAME: setLabel("First Name");
-    LAST_NAME:  setLabel("Last Name");
-    PROVINCE:   setLabel("Province");
+    FIRST_NAME: label("First Name");
+    LAST_NAME:  label("Last Name");
+    PROVINCE:   label("Province");
 }
     </script>
     <style type="text/css">
