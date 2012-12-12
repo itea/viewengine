@@ -99,6 +99,8 @@ var
 
       rules = [],
 
+      runcode,
+
       actmap = {
         line: {
             '!component': function () {
@@ -117,6 +119,10 @@ var
                 state = 'defrule';
             },
 
+            '!run': function () {
+                state = 'defrun';
+            },
+
             '#': function () {
                 var pos = input.indexOf('\n', position_token) +1;
                 if (pos === 0) pos = input.length;
@@ -133,7 +139,7 @@ var
         defcomponent: {
             'letter': function () {
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w]*))?(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?(?=\s*[{;])/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
                 if ( !match ) error("Incorrect format of deffield.");
@@ -187,7 +193,7 @@ var
         defgroup: {
             'letter': function () {
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w]*))?(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?(?=\s*[{;])/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
                 if ( !match) error('Incorrect format of defgroup.');
@@ -235,6 +241,22 @@ var
             'eof': function () {
                 state = 'end';
             }
+        },
+
+        defrun: {
+            '{': function () {
+                var code, codematch;
+                codematch = (/^{$([^\0]*?)^}~/m).exec( input.substring(position_token) );
+                code = codematch[1];
+                move_forward( codematch[0].length );
+
+                runcode = codematch[1];
+                state = 'line';
+            },
+
+            'eof': function () {
+                state = 'end';
+            }
         }
       },
     
@@ -266,7 +288,8 @@ var
           case '\n':
               return 'eol';
           case '#':
-              return '#';
+          case '{':
+              return ch;
           default:
               if (/\w/.test(ch)) return 'letter';
               error('Unexpected input');
@@ -281,29 +304,64 @@ var
           fn();
       }
 
-      return [ components, fields, groups, rules ];
+      return [ components, fields, groups, rules, runcode ];
   },
 
-  defComponent = function (engine, name, inherit, tagName, view, code) {
+  defComponent = function (engine, name, inherit, elementExpr, view, code) {
 
-      var comp = { view: view, name: name, tagName: tagName };
+      var comp = { view: view, name: name, elementExpr: elementExpr };
 
       if (inherit) extend( comp, inherit );
 
-      if (code) ( new Function(code) ).call( comp );
+      if (code) {
+          try {
+              ( new Function("engine", code) ).call( comp, engine );
+          } catch (e) {
+              window._e = e;
+          }
+      }
 
       return comp;
+  },
+
+  createElement = function (element_expr, defaultTag) {
+      var element, match;
+      if ( !defaultTag ) defaultTag = 'div';
+
+      if ( !element_expr ) element = document.createElement(defaultTag);
+      else {
+          match = /^\s*(\w+)(?:#([\d\w-]+))?((?:\.[\d\w-]+)*)?((?:\:[\w-]+)*)?(?:&([\d\w\.-]+))?(?=\s|$)/.exec(element_expr);
+          element = document.createElement(match[1]);
+
+          if (match[2]) {
+              element.setAttribute('id', match[2]);
+          }
+          if (match[3]) {
+              element.setAttribute('class', match[3].substring(1).replace(/\./, ' '));
+          }
+      }
+
+      return element;
   },
 
   defField = function (engine, name, component, args) {
 
       var Field = function () {
-          var node = ( this.node = document.createElement( component.tagName || 'div') );
+          var node = ( this.node = createElement(component.elementExpr) );
 
           this.name = name;
           this.componentName = component.name;
-          node.className = "-vn-field";
           if (this.view) node.innerHTML = this.view;
+
+          if ( !component.elementExpr) {
+              if (node.children.length > 0) {
+                  node = node.children[0];
+              } else {
+                  node = node.firstChild;
+              }
+              node.parentNode.removeChild(node);
+              this.node = node;
+          }
           
           if (this.init) {
               this.init.apply( this, args || []);
@@ -365,22 +423,34 @@ var
       }
   },
 
-  defGroup = function (engine, name, inherit, tagName, view, code) {
+  defGroup = function (engine, name, inherit, elementExpr, view, code) {
 
       var Group = function () {
-          var node = ( this.node = document.createElement( tagName || 'div') ),
+          var node = ( this.node = createElement(elementExpr) ),
               members = ( this.members = [] ),
               i, len, e, field;
 
           this.name = name;
-          node.className = "-vn-group";
-          node.innerHTML = view;
 
-          _build_groupview(node.childNodes, members, engine.fields, engine.groups, name);
+          if (view) {
+              node.innerHTML = view;
+
+              _build_groupview(node.childNodes, members, engine.fields, engine.groups, name);
+
+              if ( !elementExpr) {
+                  if (node.children.length > 0) {
+                      node = node.children[0];
+                  } else {
+                      node = node.firstChild;
+                  }
+                  node.parentNode.removeChild(node);
+                  this.node = node;
+              }
+          }
 
       };
 
-      if (code) ( new Function(code) ).call( Group.prototype );
+      if (code) ( new Function("engine", code) ).call( Group.prototype, engine );
 
       return Group;
   },
@@ -483,7 +553,8 @@ var
 
   Rule = function (name, input) {
       this.name = name;
-      this.load(input);
+      this.statements = [];
+      if (input) this.load(input);
   },
 
   Engine = function () {
@@ -493,15 +564,25 @@ var
       this.rules = {};
   },
 
-  /* This function traverse obj and build a name/instance index. */
-  build_field_index = function (obj, index) {
+  /* This function traverse obj and build a name/instance index.
+   * index_mode indicate which mode index names build:
+   *   flat or F: drop hierarchy info, build a flat index. This is default.
+   *   hierarchy or H: build a hierarchy index, using slash indicate seprate.
+   *   shirt or S: shift hierarchy, shift hierarchy to left one level.
+   */
+  build_field_index = function (obj, index, index_mode) {
+      if ( !index_mode ) index_mode = 'flat';
+
       if (obj.members) { // seems a group
           var i = 0, len = obj.members.length;
           for (; i < len; i++) {
               build_field_index(obj.members[i], index);
           }
       } else { // like a field
-          if (obj.name) index[ obj.name ] = obj;
+          if (obj.name) {
+              if ( !index[ obj.name ] ) index[ obj.name ] = [];
+              index[ obj.name ].push(obj);
+          }
       }
   };
 
@@ -513,6 +594,7 @@ var
               fields = ls[1],
               groups = ls[2],
               rules = ls[3],
+              runcode = ls[4],
               i, len, e, ent;
 
           for (i = 0, len = components.length; i < len; i++) {
@@ -538,6 +620,12 @@ var
               this.rules[ e[0] ] = new Rule( e[0], e[1] );
           }
 
+          if (runcode) {
+              var runfn = new Function("engine", "components", "fields", "groups", "rules", runcode);
+              this.run = function () {
+                  runfn.call(this, this, this.components, this.fields, this.groups, this.rules);
+              };
+          }// else this.run = function () {};
       }
   });
 
@@ -545,6 +633,31 @@ var
       /* Load statements from text input. */
       load: function (input) {
           this.statements = parse_rule(input);
+      },
+
+      appendStatement: function (names) {
+          if (arguments.length < 2) error("Need at least 2 parameters.");
+
+          if (typeof names === 'string') {
+              names = trim(names).split(/\s+/);
+          } else {
+              names = names.slice(); // copy
+          }
+
+          var i = 0, len = arguments.length, arg, calls = [], callName;
+
+          while( i++ < len) {
+              arg = arguments[i];
+              if (typeof arg === 'string') {
+                  calls.push( arg );
+                  callName = arg;
+              } else if (arg instanceof Array) {
+                  // This kindof judge of Array is not accurate.
+                  calls[ callName ] = arg;
+              }
+          }
+
+          this.statements.push( {names: names, calls: calls} );
       },
 
       /* Apply the rule on certain object */
@@ -564,11 +677,12 @@ var
                   var args = calls[ call ] || [];
 
                   forEach( names, function (name) {
-                      var obj = index[ name ];
+                      forEach( index[ name ], function (obj) {
 
-                      if (obj && obj[ call ]) {
-                          obj[ call ].call( obj, args );
-                      }
+                          if (obj && obj[ call ]) {
+                              obj[ call ].apply( obj, args );
+                          }
+                      });
 
                   });
 
@@ -581,5 +695,6 @@ var
   window.parse_script = parse_script;
   window.parse_rule = parse_rule;
   window.Vngin = Engine;
+  Engine.Rule = Rule;
 
 })();

@@ -1,0 +1,62 @@
+!component cell : td{
+} {
+    this.value = function (value) {
+        this.node.innerText = value;
+    };
+
+    this.width = function (value) {
+        this.node.style.width = value;
+    };
+
+    this.color = function (value) {
+        this.node.style.color = value;
+    };
+}~
+
+!field NAME cell;
+!field PHONE cell;
+
+!group ROW : tr {
+    {@NAME}
+    {@PHONE}
+} {
+    this.values = function (values) {
+        this.members.NAME.value(values.NAME);
+        this.members.PHONE.value(values.PHONE);
+    }
+}~
+
+!group GRID1 : table {
+} {
+    this.appendRow = function (record) {
+        var row = new engine.groups.ROW();
+        this.node.appendChild(row.node);
+        this.members.push(row);
+        row.values(record);
+    };
+
+    this.removeRow = function (rowIndex) {
+        var row = this.members.splice(rowIndex, 1)[0];
+        row.node.parentNode.removeChild(row.node);
+    };
+}~
+
+!rule setWidth {
+    NAME: width("40px");
+    PHONE: width("90px");
+}
+
+!rule setColor {
+    NAME: color("red");
+    PHONE: color("green");
+}
+
+!run {
+    window.grid = new engine.groups.GRID1();
+    document.body.appendChild(grid.node);
+    grid.appendRow({NAME: 'San', PHONE: 123});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775890});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775891});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775892});
+    engine.rules.setWidth.applyOn(grid);
+}~

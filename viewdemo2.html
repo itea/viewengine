@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript" src="viewengine.js"></script>
+    <!-- <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script> -->
+    <script type="text/javascript">
+function run() {
+    window.sbug = document.getElementById('sbug').textContent;
+    window.engine = new Vngin();
+    try { engine.loadScript(sbug); } catch (e) { console.log(e.stack); }
+    var script = new engine.fields.SCRIPT();
+    document.body.appendChild(script.node);
+
+    window.max = new engine.groups.max();
+    document.body.appendChild(max.node);
+    engine.rules.SET_LABEL.applyOn(max);
+}
+window.addEventListener('load', function () {
+    run();
+});
+
+    </script>
+    <script type="text/bug" id="sbug">
+
+!component inputBox {
+    <span class="-vnc-asterisk"></span>
+    <span class="-vnc-label"></span>
+    <input class="-vnc-input" type="text"/>
+} {
+    this.editattr = function (edt) {
+        switch(edt) {
+        case 'mandatory':
+        case 'M':
+            this.node.getElementsByClassName("-vnc-asterisk")[0].innerText = "*";
+            break;
+        case 'optional':
+        case 'O':
+            this.node.getElementsByClassName("-vnc-asterisk")[0].innerText = "";
+            break;
+        case 'readonly':
+        case 'R':
+            this.node.getElementsByClassName("-vnc-input")[0].disabled = false;
+            this.node.getElementsByClassName("-vnc-input")[0].readonly = true;
+            break;
+        case 'editable':
+        case 'E':
+            this.node.getElementsByClassName("-vnc-input")[0].disabled = false;
+            this.node.getElementsByClassName("-vnc-input")[0].readonly = false;
+            break;
+        case 'disabled':
+        case 'D':
+            this.node.getElementsByClassName("-vnc-input")[0].disabled = true;
+            this.node.getElementsByClassName("-vnc-input")[0].readonly = false;
+            break;
+        }
+    };
+
+    this.label = function ( label ) {
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
+    };
+
+}~
+
+!component checkBox :span {
+    <input class="-vnc-checkbox" type="checkbox"/>
+    <span class="-vnc-label"></span>
+} {
+    this.label = function (label) {
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
+    };
+
+    this.disable = function () {
+        this.node.getElementsByClassName("-vnc-checkbox")[0].disabled = true;
+    };
+    
+    this.enable = function () {
+        this.node.getElementsByClassName("-vnc-checkbox")[0].disabled = false;
+    };
+}~
+
+!component dropDownBox {
+    <span class="-vnc-asterisk"></span>
+    <span class="-vnc-label"></span>
+    <select class="-vnc-select"></select>
+} {
+    this.editattr = function (edt) {
+        switch(edt) {
+        case 'mandatory':
+        case 'M':
+            this.node.getElementsByClassName("-vnc-asterisk")[0].innerText = "*";
+            break;
+        case 'optional':
+        case 'O':
+            this.node.getElementsByClassName("-vnc-asterisk")[0].innerText = "";
+            break;
+        case 'readonly':
+        case 'R':
+            this.node.getElementsByClassName("-vnc-select")[0].disabled = false;
+            this.node.getElementsByClassName("-vnc-select")[0].readonly = true;
+            break;
+        case 'editable':
+        case 'E':
+            this.node.getElementsByClassName("-vnc-select")[0].disabled = false;
+            this.node.getElementsByClassName("-vnc-select")[0].readonly = false;
+            break;
+        case 'disabled':
+        case 'D':
+            this.node.getElementsByClassName("-vnc-select")[0].disabled = true;
+            this.node.getElementsByClassName("-vnc-select")[0].readonly = false;
+            break;
+        }
+    };
+
+    this.label = function (label) {
+        this.node.getElementsByClassName("-vnc-label")[0].innerText = label;
+    };
+
+    this.options = function (options) {
+        var select = this.node.getElementsByClassName("-vnc-select")[0],
+            i, len, e, option;
+
+        for (i = 0, len = options.length; i<len; i++) {
+            e = options[i];
+            option = document.createElement("option");
+
+            option.value = e.value;
+            option.innerText = e.name;
+            select.appendChild(option);
+        }
+    };
+}~
+
+!component scriptBox {
+    <textarea class="-vnc-textarea -vnc-scriptbox"></textarea>
+    <input class="-vnc-button" type="button" value="RUN"/>
+} {
+    this.init = function () {
+        var _this = this;
+        this.node.getElementsByClassName("-vnc-button")[0].addEventListener("click", function (evt) {
+            var script = _this.node.getElementsByClassName("-vnc-textarea")[0].value;
+            try {
+                (new Function(script)).call(window);
+            } catch (e) {
+                alert(e.msg);
+                console.log(e);
+                window._e = e;
+            }
+        });
+    };
+}~
+
+# define fields
+
+!field FIRST_NAME inputBox("Hello");
+!field LAST_NAME checkBox;
+!field PROVINCE dropDownBox;
+!field SCRIPT scriptBox;
+
+!group min {
+    {@FIRST_NAME}
+    {@LAST_NAME}
+} {
+    this.hello = function () { alert("hello"); };
+}~
+
+!group max {
+    {@PROVINCE}
+    {@min}
+}
+
+!rule NAME_MAND {
+	FIRST_NAME LAST_NAME: mandatory;
+    PROVINCE: max(9);
+}
+
+!rule SET_LABEL {
+    FIRST_NAME: label("First Name") editattr("M");
+    LAST_NAME:  label("Last Name");
+    PROVINCE:   label("Province");
+}
+    </script>
+    <style type="text/css">
+.-vn-field { overflow: hidden; }
+.-vnc-scriptbox {width: 600px; height: 200px;}
+.-vnc-asterisk {color: red; width: 14px; text-align: right; display: inline-block;}
+.-vnc-label {width: 80px;display: inline-block;}
+
+    </style>
+</head>
+<body>
+</body>
+</html>
