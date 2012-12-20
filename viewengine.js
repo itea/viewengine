@@ -18,17 +18,22 @@ var
             }
         },
 
-  extend = function(target, src) {
-      var e;
-      for (e in src) {
-          target[e] = src[e];
+  extend = function(target) {
+      var e, src, i, len;
+
+      for (i = 1, len = arguments.length; i < len; i++) {
+          src = arguments[i];
+          for (e in src) {
+              target[e] = src[e];
+          }
       }
+
       return target;
   },
 
-  regx_literalness = /^[\x20\t\n\r]*(?:(true|false|null|undefined)|(-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)|"((?:[^\r\n\t\\\"]|\\(?:["\\\/trnfb]|u[0-9a-fA-F]{4}))*)"|\/((?:[^\/\\]+|\\[/\\trnfb])+)\/)/,
+  regx_literalness = /^[\x20\t\n\r]*(?:([$A-Za-z_](?:[$\w])*)|(-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)|"((?:[^\r\n\t\\\"]|\\(?:["\\\/trnfb]|u[0-9a-fA-F]{4}))*)"|\/((?:[^\/\\]+|\\[/\\trnfb])+)\/)/,
 
-  _push_arg = function (input, args) {
+  _push_arg = function (input, args, acceptIdentifier) {
       var match = regx_literalness.exec( input );
 
       if ( !match ) error( "Unexpected input. " );
@@ -47,6 +52,9 @@ var
           case 'undefined':
               args.push(undefined);
               break;
+          default:
+              if ( !acceptIdentifier ) error(" Undexpected input: " + match[1]);
+              args.push( new Symbol(match[1]) );
           }
 
       } else if ( match[2] ) { // number
@@ -62,18 +70,22 @@ var
       return match[0].length;
   },
 
-  parse_args = function (input, position, move_forward) {
+  parse_args = function (input, position, move_forward, acceptIdentifier) {
       var args = [], ch = input.charAt(position), len;
       if (ch === '(') { // deal args
           position ++;
           move_forward(1);
   
           while (true) {
-              len = _push_arg(input.substring(position), args);
+              len = _push_arg(input.substring(position), args, acceptIdentifier);
               position += len;
               ch = move_forward(len);
               if (ch === '') error("Unexpected EOF");
-              if (ch === ',' || ch === ')') {
+              if (ch === ',') {
+                  move_forward(1);
+                  position ++;
+                  while ( /\s/.test( input.charAt(position) ) ) position ++;
+              } else if (ch === ')') {
                   move_forward(1);
                   position ++;
                   break;
@@ -146,7 +158,7 @@ var
 
                 move_forward( match[0].length );
 
-                viewmatch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
+                viewmatch = (/^{$([^\0]*?)^}(?!~)/m).exec( input.substring(position_token) );
                 if (viewmatch) {
                     view = viewmatch[1];
                     move_forward( viewmatch[0].length );
@@ -200,7 +212,7 @@ var
 
                 move_forward( match[0].length );
 
-                viewmatch = (/^{$([^\0]*?)^}/m).exec( input.substring(position_token) );
+                viewmatch = (/^{$([^\0]*?)^}(?!~)/m).exec( input.substring(position_token) );
                 if (viewmatch) {
                     view = viewmatch[1];
                     move_forward( viewmatch[0].length );
@@ -223,7 +235,7 @@ var
 
         defrule: {
             'letter': function () {
-                var match = /^(\w[\d\w]*)(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = /^(\w[\d\w]*)(?:\s*\(\s*([$A-Za-z_](?:[$\w])*(?:\s*,\s*[$A-Za-z_](?:[$\w])*)*)\s*\))?(?=\s*{)/.exec( input.substring(position_token) ),
                     code, codematch;
 
                 if ( !match) error('Incorrect format of defrule.');
@@ -234,7 +246,7 @@ var
                 code = codematch[1];
                 move_forward( codematch[0].length );
 
-                rules.push([ match[1], codematch[1] ]);
+                rules.push([ match[1], match[2] ? match[2].split(/\s*,\s*/) : [], codematch[1] ]);
                 state = 'line';
             },
 
@@ -292,7 +304,7 @@ var
               return ch;
           default:
               if (/\w/.test(ch)) return 'letter';
-              error('Unexpected input');
+              error('Unexpected input: ' + ch);
           }
       },
       
@@ -305,23 +317,6 @@ var
       }
 
       return [ components, fields, groups, rules, runcode ];
-  },
-
-  defComponent = function (engine, name, inherit, elementExpr, view, code) {
-
-      var comp = { view: view, name: name, elementExpr: elementExpr };
-
-      if (inherit) extend( comp, inherit );
-
-      if (code) {
-          try {
-              ( new Function("engine", code) ).call( comp, engine );
-          } catch (e) {
-              window._e = e;
-          }
-      }
-
-      return comp;
   },
 
   createElement = function (element_expr, defaultTag) {
@@ -342,35 +337,6 @@ var
       }
 
       return element;
-  },
-
-  defField = function (engine, name, component, args) {
-
-      var Field = function () {
-          var node = ( this.node = createElement(component.elementExpr) );
-
-          this.name = name;
-          this.componentName = component.name;
-          if (this.view) node.innerHTML = this.view;
-
-          if ( !component.elementExpr) {
-              if (node.children.length > 0) {
-                  node = node.children[0];
-              } else {
-                  node = node.firstChild;
-              }
-              node.parentNode.removeChild(node);
-              this.node = node;
-          }
-          
-          if (this.init) {
-              this.init.apply( this, args || []);
-          }
-      };
-
-      Field.prototype = component;
-
-      return Field;
   },
 
   _build_groupview = function (childNodes, members, fields, groups, avoid) {
@@ -423,6 +389,55 @@ var
       }
   },
 
+  defComponent = function (engine, name, inherit, elementExpr, view, code) {
+
+      var comp = {};
+
+      if (inherit) extend( comp, inherit );
+
+      extend( comp, { view: view, name: name, elementExpr: elementExpr } );
+
+      if (code) {
+          try {
+              ( new Function("engine", "Rule", code) ).call( comp, engine, Rule );
+          } catch (e) {
+              window._e = e;
+          }
+      }
+
+      return comp;
+  },
+
+  defField = function (engine, name, component, args) {
+
+      var Field = function () {
+          var node = ( this.node = createElement(component.elementExpr) );
+
+          this.name = name;
+          this.componentName = component.name;
+          if (this.view) node.innerHTML = this.view;
+
+          if ( !component.elementExpr) {
+              if (node.children.length > 0) {
+                  node = node.children[0];
+              } else {
+                  node = node.firstChild;
+              }
+
+              if (node) node.parentNode.removeChild(node);
+              this.node = node;
+          }
+          
+          if (this.init) {
+              this.init.apply( this, args || []);
+          }
+      };
+
+      Field.prototype = component;
+
+      return Field;
+  },
+
   defGroup = function (engine, name, inherit, elementExpr, view, code) {
 
       var Group = function () {
@@ -450,7 +465,7 @@ var
 
       };
 
-      if (code) ( new Function("engine", code) ).call( Group.prototype, engine );
+      if (code) ( new Function("engine", "Rule", code) ).call( Group.prototype, engine, Rule );
 
       return Group;
   },
@@ -462,7 +477,7 @@ var
       position = 0,
       statements = [],
 
-      parse_rule_call = function () {
+      parse_rule_calls = function () {
           var match, args, calls = [], ch,
               regx_token = /(?=[\S]|$)/g;
 
@@ -472,10 +487,10 @@ var
               
               ch = move_forward( match[0].length );
               
-              args = parse_args(input, position, move_forward);
+              args = parse_args(input, position, move_forward, true);
 
-              calls.push( match[1] );
-              calls[ match[1] ] = args;
+              args.unshift(match[1]);
+              calls.push( args );
 
               ch = move_forward();
               if (ch === ';') {
@@ -499,12 +514,9 @@ var
 
                 move_forward( match[0].length );
 
-                calls = parse_rule_call();
+                calls = parse_rule_calls();
 
-                statements.push({
-                    names: names,
-                    calls: calls
-                });
+                statements.push( new Statement(names, calls) );
             },
             
             'eof': function () {
@@ -551,8 +563,18 @@ var
       return statements;
   },
 
-  Rule = function (name, input) {
+  Symbol = function (name) {
       this.name = name;
+  },
+
+  Statement = function (names, calls) {
+      this.names = names;
+      this.calls = calls;
+  },
+
+  Rule = function (input, argnames, name) {
+      this.name = name;
+      this.argnames = argnames || [];
       this.statements = [];
       if (input) this.load(input);
   },
@@ -599,7 +621,8 @@ var
 
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
-              this.components[ e[0] ] = defComponent( this, e[0], e[1], e[2], e[3], e[4] );
+              ent = this.components[ e[1] ];
+              this.components[ e[0] ] = defComponent( this, e[0], ent, e[2], e[3], e[4] );
           }
 
           for (i = 0, len = fields.length; i < len; i++) {
@@ -617,13 +640,15 @@ var
 
           for (i = 0, len = rules.length; i < len; i++) {
               e = rules[i];
-              this.rules[ e[0] ] = new Rule( e[0], e[1] );
+              this.rules[ e[0] ] = new Rule( e[2], e[1], e[0] );
           }
 
           if (runcode) {
-              var runfn = new Function("engine", "components", "fields", "groups", "rules", runcode);
+              var runfn = new Function("engine", "components", "fields", "groups", "rules",
+                  "Rule", runcode);
               this.run = function () {
-                  runfn.call(this, this, this.components, this.fields, this.groups, this.rules);
+                  runfn.call(this, this, this.components, this.fields, this.groups, this.rules,
+                  Rule);
               };
           }// else this.run = function () {};
       }
@@ -632,7 +657,7 @@ var
   extend( Rule.prototype, {
       /* Load statements from text input. */
       load: function (input) {
-          this.statements = parse_rule(input);
+          this.statements.push.apply( this.statements, parse_rule(input) );
       },
 
       appendStatement: function (names) {
@@ -644,51 +669,88 @@ var
               names = names.slice(); // copy
           }
 
-          var i = 0, len = arguments.length, arg, calls = [], callName;
+          var i = 0, len = arguments.length, arg, calls = [], call;
 
           while( i++ < len) {
               arg = arguments[i];
               if (typeof arg === 'string') {
-                  calls.push( arg );
-                  callName = arg;
+                  call = [arg];
               } else if (arg instanceof Array) {
                   // This kindof judge of Array is not accurate.
-                  calls[ callName ] = arg;
+                  call.push.apply(call, arg);
+                  calls.push(call);
               }
           }
 
-          this.statements.push( {names: names, calls: calls} );
+          this.statements.push( new Statement(names, calls) );
       },
 
       /* Apply the rule on certain object */
-      applyOn: function (obj) {
-          var index = {}, i, len, e, names, calls;
+      apply: function (obj, args) {
+          var index = {}, i, len, e, names, calls, ctx = {};
 
           /* First, build an index on the object. */
           build_field_index( obj, index );
 
+          /* If have argument names, build runtime context. */
+          if ( this.argnames.length > 0 ) {
+              args = args || [];
+              for (i = 0, len = this.argnames.length; i < len; i++) {
+                  ctx[ this.argnames[i] ] = args[i];
+              }
+          }
+
           /* Then apply the statements one by one. */
           for (i = 0, len = this.statements.length; i < len; i++) {
               e = this.statements[i];
-              names = e.names;
-              calls = e.calls;
-
-              forEach( calls, function (call) {
-                  var args = calls[ call ] || [];
-
-                  forEach( names, function (name) {
-                      forEach( index[ name ], function (obj) {
-
-                          if (obj && obj[ call ]) {
-                              obj[ call ].apply( obj, args );
-                          }
-                      });
-
-                  });
-
-              });
-
+              e.exec(index, ctx);
           }
+      },
+
+      /* Call the rule on certain object. */
+      call: function (obj) {
+          var i, len, args = [];
+
+          for (i = 1, len = arguments.length; i < len; i++) {
+              args.push( arguments[i] );
+          }
+
+          this.apply(obj, args);
+      }
+  });
+
+  extend( Statement.prototype, {
+      exec: function (index, ctx) {
+          var names = this.names,
+              calls = this.calls,
+              objects = [], i, len, e;
+
+          for (i = 0, len = names.length; i < len; i++) {
+              e = index[ names[i] ];
+              if (e) { objects.push.apply( objects, e ); }
+          }
+
+          forEach( calls, function (args) {
+              // The call format is [<function name>, args...]
+              args = args.slice();
+              var fnname = args.shift(), i, len, e, obj;
+
+              // process variable arguments
+              for (i = 0, len = args.length; i < len; i++) {
+                  if ( (e = args[i]) instanceof Symbol ) {
+                      args[i] = e.name in ctx ? ctx[ e.name ] : window[ e.name ];
+                  }
+              }
+
+              for (i = 0, len = objects.length; i < len; i++) {
+                  obj = objects[i];
+
+                  if (obj[ fnname ]) {
+                      obj[ fnname ].apply( obj, args );
+                  }
+              }
+
+          });
       }
   });
  
@@ -696,5 +758,6 @@ var
   window.parse_rule = parse_rule;
   window.Vngin = Engine;
   Engine.Rule = Rule;
+  Engine.Statement = Statement;
 
 })();

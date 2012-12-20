@@ -1,9 +1,5 @@
-!component cell : td{
+!component abstract_cell : td {
 } {
-    this.value = function (value) {
-        this.node.innerText = value;
-    };
-
     this.width = function (value) {
         this.node.style.width = value;
     };
@@ -13,14 +9,34 @@
     };
 }~
 
+!component cell abstract_cell : td {
+} {
+    this.value = function (value) {
+        this.node.innerText = value;
+    };
+
+}~
+
+!component inputCell abstract_cell: td {
+    <input type="text" style="margin:0;padding:0;border:0;height:100%;width:100%;"/>
+} {
+    this.init = function () {
+        this.node.style.padding = '0';
+    };
+
+}~
+
 !field NAME cell;
 !field PHONE cell;
+!field ADDR inputCell;
 
 !group ROW : tr {
     {@NAME}
     {@PHONE}
+    {@ADDR}
 } {
     this.values = function (values) {
+
         this.members.NAME.value(values.NAME);
         this.members.PHONE.value(values.PHONE);
     }
@@ -44,10 +60,11 @@
 !rule setWidth {
     NAME: width("40px");
     PHONE: width("90px");
+    ADDR: width("80px");
 }
 
-!rule setColor {
-    NAME: color("red");
+!rule setColor (color) {
+    NAME: color(color);
     PHONE: color("green");
 }
 
@@ -58,5 +75,5 @@
     grid.appendRow({NAME: 'Sam', PHONE: 58775890});
     grid.appendRow({NAME: 'Sam', PHONE: 58775891});
     grid.appendRow({NAME: 'Sam', PHONE: 58775892});
-    engine.rules.setWidth.applyOn(grid);
+    engine.rules.setWidth.apply(grid);
 }~
