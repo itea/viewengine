@@ -22,31 +22,89 @@
 } {
     this.init = function () {
         this.node.style.padding = '0';
+        this.node.style.height = '20px';
     };
 
+    this.value = function (value) {
+        if (value === undefined)
+            return this.node.children[0].value;
+
+        this.node.children[0].value = value;
+    };
 }~
 
-!field NAME cell;
-!field PHONE cell;
-!field ADDR inputCell;
+!component headCell cell: th {
+    <span></span>
+    <div style="position:absolute; right:0; top:0; width:2px; height:100%; cursor:e-resize;">&nbsp;</div>
+} {
+    this.init = function () {
+        this.node.style.position = 'relative';
 
-!group ROW : tr {
+        var bar = this.node.children[1], x, orignWidth,
+            move = function (event) {
+                var diffx = event.clientX - x;
+                bar.parentNode.style.width = (orignWidth + diffx) + 'px';
+            },
+
+            up = function (event) {
+                document.body.removeEventListener('mousemove', move);
+                document.body.removeEventListener('mouseup', up);
+            };
+
+        bar.addEventListener('mousedown', function (event) {
+            orignWidth = parseInt(bar.parentNode.offsetWidth)
+            document.body.addEventListener('mousemove', move);
+            document.body.addEventListener('mouseup', up);
+            x = event.clientX;
+        });
+
+    };
+
+    this.value = function (value) {
+        this.node.children[0].innerText = value;
+    };
+}~
+
+!alias NAME inputCell;
+!alias PHONE inputCell;
+!alias ADDR inputCell;
+
+!alias head_NAME headCell;
+!alias head_PHONE headCell;
+!alias head_ADDR headCell;
+
+!component ROW : tr {
     {@NAME}
     {@PHONE}
     {@ADDR}
 } {
     this.values = function (values) {
 
+        if (values === undefined)
+            return {
+                NAME: this.members.NAME.value(),
+                PHONE: this.members.PHONE.value(),
+                ADDR: this.members.ADDR.value()
+            };
+
         this.members.NAME.value(values.NAME);
         this.members.PHONE.value(values.PHONE);
+        this.members.ADDR.value(values.ADDR);
     }
 }~
 
-!group GRID1 : table {
+!component head_ROW : tr {
+    {@head_NAME}
+    {@head_PHONE}
+    {@head_ADDR}
+}
+
+!component GRID1 : table {
 } {
     this.appendRow = function (record) {
-        var row = new engine.groups.ROW();
+        var row = new engine.components.ROW();
         this.node.appendChild(row.node);
+        this.members[ row.name + "#" + this.members.length ] = row;
         this.members.push(row);
         row.values(record);
     };
@@ -57,10 +115,40 @@
     };
 }~
 
+!component GRID2 : table {
+    <thead></thead>
+    <tbody></tbody>
+} {
+    this.init = function () {
+        this.thead = this.node.children[0];
+        this.tbody = this.node.children[1];
+        this.rows = [];
+
+        var headRow = new engine.components.head_ROW();
+        this.members[ headRow.name ] = headRow;
+        this.members.push(headRow);
+        this.thead.appendChild(headRow.node);
+    };
+
+    this.appendRow = function (record) {
+        var row = new engine.components.ROW();
+        this.tbody.appendChild(row.node);
+        this.members[ row.name + "#" + this.members.length ] = row;
+        this.members.push(row);
+        this.rows.push( row );
+        row.values(record);
+    };
+
+    this.removeRow = function (rowIndex) {
+        var row = this.rows.splice(rowIndex, 1)[0];
+        row.node.parentNode.removeChild(row.node);
+    };
+}~
+
 !rule setWidth {
-    NAME: width("40px");
-    PHONE: width("90px");
-    ADDR: width("80px");
+    head_NAME NAME: width("40px");
+    head_PHONE PHONE: width("90px");
+    head_ADDR ADDR: width("80px");
 }
 
 !rule setColor (color) {
@@ -68,12 +156,19 @@
     PHONE: color("green");
 }
 
+!rule setHead {
+    head_NAME: value("NAME");
+    head_PHONE: value("PHONE");
+    head_ADDR: value("ADDR");
+}
+
 !run {
-    window.grid = new engine.groups.GRID1();
+    window.grid = new engine.components.GRID2();
     document.body.appendChild(grid.node);
     grid.appendRow({NAME: 'San', PHONE: 123});
     grid.appendRow({NAME: 'Sam', PHONE: 58775890});
     grid.appendRow({NAME: 'Sam', PHONE: 58775891});
     grid.appendRow({NAME: 'Sam', PHONE: 58775892});
     engine.rules.setWidth.apply(grid);
+    engine.rules.setHead.apply(grid);
 }~

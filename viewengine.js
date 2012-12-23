@@ -105,9 +105,7 @@ var
     
       components = [],
 
-      fields = [],
-
-      groups = [],
+      aliases = [],
 
       rules = [],
 
@@ -119,12 +117,8 @@ var
                 state = 'defcomponent';
             },
             
-            '!field': function () {
-                state = 'deffield';
-            },
-
-            '!group': function () {
-                state = 'defgroup';
+            '!alias': function () {
+                state = 'defalias';
             },
 
             '!rule': function () {
@@ -150,11 +144,12 @@ var
 
         defcomponent: {
             'letter': function () {
+                //(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?\s*(?:{$([^\0]*?)^}|([^\0]*?)^~)
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
                 var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?(?=\s*[{;])/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
-                if ( !match ) error("Incorrect format of deffield.");
+                if ( !match ) error("Incorrect format of defalias.");
 
                 move_forward( match[0].length );
 
@@ -179,12 +174,12 @@ var
             }
         },
 
-        deffield: {
+        defalias: {
             'letter': function () {
                 var match = /^(\w[\d\w]*)\s+(\w[\d\w]*)/.exec( input.substring(position_token) ),
                     args;
 
-                if ( !match) error('Incorrect format of deffield.');
+                if ( !match) error('Incorrect format of defalias.');
 
                 move_forward( match[0].length );
 
@@ -193,38 +188,7 @@ var
                 if (move_forward() !== ';') error("Expecting ';'.");
                 move_forward(1);
 
-                fields.push([ match[1], match[2], args ]);
-                state = 'line';
-            },
-
-            'eof': function () {
-                state = 'end';
-            }
-        },
-
-        defgroup: {
-            'letter': function () {
-                /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?(?=\s*[{;])/.exec( input.substring(position_token) ),
-                    view, viewmatch, code, codematch;
-
-                if ( !match) error('Incorrect format of defgroup.');
-
-                move_forward( match[0].length );
-
-                viewmatch = (/^{$([^\0]*?)^}(?!~)/m).exec( input.substring(position_token) );
-                if (viewmatch) {
-                    view = viewmatch[1];
-                    move_forward( viewmatch[0].length );
-                }
-
-                codematch = (/^{$([^\0]*?)^}~/m).exec( input.substring(position_token) );
-                if (codematch) {
-                    code = codematch[1];
-                    move_forward( codematch[0].length );
-                }
-
-                groups.push([ match[1], match[2], match[3], view, code ]);
+                aliases.push([ match[1], match[2], args ]);
                 state = 'line';
             },
 
@@ -316,7 +280,7 @@ var
           fn();
       }
 
-      return [ components, fields, groups, rules, runcode ];
+      return [ components, aliases, rules, runcode ];
   },
 
   createElement = function (element_expr, defaultTag) {
@@ -339,7 +303,7 @@ var
       return element;
   },
 
-  _build_groupview = function (childNodes, members, fields, groups, avoid) {
+  _build_view = function (childNodes, members, aliases, avoid) {
       if (childNodes.length === 0) return;
 
       var i, len, e, match, lastIndex, docFrag, member, text, nodes = [],
@@ -353,7 +317,7 @@ var
           e = nodes[i];
 
           if ( e.nodeType === 1 ) {
-              _build_groupview( e.childNodes, members, fields, groups, avoid );
+              _build_view( e.childNodes, members, aliases, avoid );
               continue;
           }
           if ( e.nodeType !== 3 ) continue;
@@ -364,12 +328,10 @@ var
               match = regx.exec(text);
               if ( !match) break; // no match found
               
-              member = fields[ match[1] ];
+              /* avoid the component include itself */
+              if ( match[1] === avoid ) error("A component cannot include itself.");
 
-              /* avoid the group include itself */
-              if ( !member && match[1] === avoid ) error("A group cannot include itself.");
-
-              member = member || groups[ match[1] ];
+              member = aliases[ match[1] ];
 
               if ( !member ) error( "Cannot find: " + match[1] );
               if ( !docFrag ) docFrag = document.createDocumentFragment();
@@ -391,33 +353,17 @@ var
 
   defComponent = function (engine, name, inherit, elementExpr, view, code) {
 
-      var comp = {};
+      var Component = function (initargs) {
+          var node = ( this.node = createElement(this.elementExpr) );
+              members = ( this.members = [] );
 
-      if (inherit) extend( comp, inherit );
+          if (this.view) {
+              node.innerHTML = this.view;
 
-      extend( comp, { view: view, name: name, elementExpr: elementExpr } );
-
-      if (code) {
-          try {
-              ( new Function("engine", "Rule", code) ).call( comp, engine, Rule );
-          } catch (e) {
-              window._e = e;
+              _build_view(node.childNodes, members, engine.aliases, name);
           }
-      }
 
-      return comp;
-  },
-
-  defField = function (engine, name, component, args) {
-
-      var Field = function () {
-          var node = ( this.node = createElement(component.elementExpr) );
-
-          this.name = name;
-          this.componentName = component.name;
-          if (this.view) node.innerHTML = this.view;
-
-          if ( !component.elementExpr) {
+          if ( !this.elementExpr) {
               if (node.children.length > 0) {
                   node = node.children[0];
               } else {
@@ -429,45 +375,39 @@ var
           }
           
           if (this.init) {
-              this.init.apply( this, args || []);
+              this.init.apply( this, initargs || []);
           }
       };
 
-      Field.prototype = component;
+      if (inherit) extend( Component.prototype, inherit.prototype);
 
-      return Field;
+      if (code) {
+          ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule );
+      }
+
+      extend( Component.prototype, { view: view, name: name, elementExpr: elementExpr } );
+
+      return Component;
   },
 
-  defGroup = function (engine, name, inherit, elementExpr, view, code) {
+  defAlias = function (engine, name, component, args) {
 
-      var Group = function () {
-          var node = ( this.node = createElement(elementExpr) ),
-              members = ( this.members = [] ),
-              i, len, e, field;
+      // return [name, component, args];
 
-          this.name = name;
-
-          if (view) {
-              node.innerHTML = view;
-
-              _build_groupview(node.childNodes, members, engine.fields, engine.groups, name);
-
-              if ( !elementExpr) {
-                  if (node.children.length > 0) {
-                      node = node.children[0];
-                  } else {
-                      node = node.firstChild;
-                  }
-                  node.parentNode.removeChild(node);
-                  this.node = node;
-              }
+      var Alias = function () {
+          var comp = new component(args);
+          comp.name = name;
+          
+          /*
+          if (comp.init) {
+              comp.init.apply( comp, args || []);
           }
+          */
 
+          return comp;
       };
 
-      if (code) ( new Function("engine", "Rule", code) ).call( Group.prototype, engine, Rule );
-
-      return Group;
+      return Alias;
   },
 
   /* Parse rule statements from text input. */
@@ -557,6 +497,7 @@ var
       while ( state !== 'end' ) {
           token = reco_token();
           fn = actmap[state][token];
+          if ( !fn ) error( "Unexpected input." );
           fn();
       }
 
@@ -581,8 +522,7 @@ var
 
   Engine = function () {
       this.components = {};
-      this.fields = {};
-      this.groups = {};
+      this.aliases = {};
       this.rules = {};
   },
 
@@ -592,15 +532,23 @@ var
    *   hierarchy or H: build a hierarchy index, using slash indicate seprate.
    *   shirt or S: shift hierarchy, shift hierarchy to left one level.
    */
-  build_field_index = function (obj, index, index_mode) {
+  build_component_index = function (obj, index, index_mode) {
       if ( !index_mode ) index_mode = 'flat';
 
       if (obj.members) { // seems a group
           var i = 0, len = obj.members.length;
+
           for (; i < len; i++) {
-              build_field_index(obj.members[i], index);
+              build_component_index(obj.members[i], index);
           }
-      } else { // like a field
+
+          if (obj.name) {
+              if ( !index[ obj.name ] ) index[ obj.name ] = [];
+              index[ obj.name ].push(obj);
+          }
+
+      } else { // like a leaf
+
           if (obj.name) {
               if ( !index[ obj.name ] ) index[ obj.name ] = [];
               index[ obj.name ].push(obj);
@@ -613,29 +561,24 @@ var
       loadScript: function (input) {
           var ls = parse_script(input),
               components = ls[0],
-              fields = ls[1],
-              groups = ls[2],
-              rules = ls[3],
-              runcode = ls[4],
+              aliases = ls[1],
+              rules = ls[2],
+              runcode = ls[3],
               i, len, e, ent;
 
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
               ent = this.components[ e[1] ];
               this.components[ e[0] ] = defComponent( this, e[0], ent, e[2], e[3], e[4] );
+              this.aliases[ e[0] ] = defAlias( this, e[0], ent, [] );
           }
 
-          for (i = 0, len = fields.length; i < len; i++) {
-              e = fields[i];
+          for (i = 0, len = aliases.length; i < len; i++) {
+              e = aliases[i];
               ent = this.components[ e[1] ];
               if ( !ent ) error( "Cannot find component: " + e[1] );
 
-              this.fields[ e[0] ] = defField( this, e[0], ent, e[2] );
-          }
-
-          for (i = 0, len = groups.length; i < len; i++) {
-              e = groups[i];
-              this.groups[ e[0] ] = defGroup( this, e[0], e[1], e[2], e[3], e[4] );
+              this.aliases[ e[0] ] = defAlias( this, e[0], ent, e[2] );
           }
 
           for (i = 0, len = rules.length; i < len; i++) {
@@ -644,11 +587,9 @@ var
           }
 
           if (runcode) {
-              var runfn = new Function("engine", "components", "fields", "groups", "rules",
-                  "Rule", runcode);
+              var runfn = new Function("engine", "aliases", "rules", "Rule", runcode);
               this.run = function () {
-                  runfn.call(this, this, this.components, this.fields, this.groups, this.rules,
-                  Rule);
+                  runfn.call(this, this, this.aliases, this.rules, Rule);
               };
           }// else this.run = function () {};
       }
@@ -690,7 +631,7 @@ var
           var index = {}, i, len, e, names, calls, ctx = {};
 
           /* First, build an index on the object. */
-          build_field_index( obj, index );
+          build_component_index( obj, index );
 
           /* If have argument names, build runtime context. */
           if ( this.argnames.length > 0 ) {

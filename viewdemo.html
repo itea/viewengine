@@ -9,11 +9,16 @@ function run() {
     window.sbug = document.getElementById('sbug').textContent;
     window.engine = new Vngin();
     try { engine.loadScript(sbug); } catch (e) { console.log(e.stack); }
-    var script_load = new engine.fields.SCRIPT_LOAD();
+    var script_load = new engine.aliases.SCRIPT_LOAD();
     document.body.appendChild(script_load.node);
-    // var script = new engine.fields.SCRIPT();
+    // var script = new engine.aliases.SCRIPT();
     // document.body.appendChild(script.node);
 
+    /*
+    document.body.addEventListener('mousemove', function (event) {
+        console.log(event.button + ', ' + event.clientX);
+    });
+    */
 }
 window.addEventListener('load', run);
 
@@ -58,8 +63,8 @@ window.addEventListener('load', run);
     };
 }~
 
-!field SCRIPT scriptBox;
-!field SCRIPT_LOAD ajaxLoad("viewdemo.txt");
+!alias SCRIPT scriptBox;
+!alias SCRIPT_LOAD ajaxLoad("viewdemo.txt");
     </script>
     <style type="text/css">
 body {font:12px Myriad,Helvetica,Tahoma,Arial,clean,sans-serif;}
