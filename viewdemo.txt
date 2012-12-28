@@ -39,6 +39,7 @@
 } {
     this.init = function () {
         this.node.style.position = 'relative';
+        this.node.style.padding = '0px';
 
         var bar = this.node.children[1], x, orignWidth,
             move = function (event) {
@@ -52,7 +53,7 @@
             };
 
         bar.addEventListener('mousedown', function (event) {
-            orignWidth = parseInt(bar.parentNode.offsetWidth)
+            orignWidth = parseInt(bar.parentNode.clientWidth);
             document.body.addEventListener('mousemove', move);
             document.body.addEventListener('mouseup', up);
             x = event.clientX;
@@ -74,9 +75,9 @@
 !alias head_ADDR headCell;
 
 !component ROW : tr {
-    {@NAME}
-    {@PHONE}
-    {@ADDR}
+    {{NAME.name}}
+    {{PHONE#phone}}
+    {{ADDR}}
 } {
     this.values = function (values) {
 
@@ -87,24 +88,41 @@
                 ADDR: this.members.ADDR.value()
             };
 
-        this.members.NAME.value(values.NAME);
-        this.members.PHONE.value(values.PHONE);
-        this.members.ADDR.value(values.ADDR);
-    }
+        this.members.callFn(function () {
+            this.value( values[ this.name ] );
+        });
+
+    };
 }~
 
-!component head_ROW : tr {
-    {@head_NAME}
-    {@head_PHONE}
-    {@head_ADDR}
-}
+!component DROW : tr {
+} {
+    this.init = function (cellnames) {
+        var cellNames = this.cellNames = [],
+            that = this;
+
+        cellnames.split(/\s+/).forEach(function (e, i) {
+            cell = engine.createComponent(e);
+            cellNames.push(e);
+            that.node.appendChild(cell.node);
+            that.members.push(cell);
+            that.members[ e ] = cell;
+        });
+    };
+
+    this.values = function (values) {
+        var that = this;
+        this.cellNames.forEach(function (e, i) {
+            that.members[ e ].value( values[e] );
+        });
+    };
+}~
 
 !component GRID1 : table {
 } {
     this.appendRow = function (record) {
-        var row = new engine.components.ROW();
+        var row = engine.createComponent("ROW");
         this.node.appendChild(row.node);
-        this.members[ row.name + "#" + this.members.length ] = row;
         this.members.push(row);
         row.values(record);
     };
@@ -115,35 +133,43 @@
     };
 }~
 
+!alias napROW DROW("NAME ADDR PHONE");
+
 !component GRID2 : table {
     <thead></thead>
     <tbody></tbody>
 } {
-    this.init = function () {
+    this.init = function (columnNames) {
+        this.columnNames = columnNames;
         this.thead = this.node.children[0];
         this.tbody = this.node.children[1];
-        this.rows = [];
 
-        var headRow = new engine.components.head_ROW();
-        this.members[ headRow.name ] = headRow;
+        var headNames = columnNames.split(/\s+/).map(function (e, i) {
+                return 'head_' +  e;
+            }).join(' '),
+            headRow = engine.createComponent("DROW", [ headNames ]);
+
+        headRow.nick = "head";
         this.members.push(headRow);
         this.thead.appendChild(headRow.node);
     };
 
     this.appendRow = function (record) {
-        var row = new engine.components.ROW();
+        var row = engine.createComponent("DROW", [ this.columnNames ]);
+        row.classes = [ 'row' ];
         this.tbody.appendChild(row.node);
-        this.members[ row.name + "#" + this.members.length ] = row;
         this.members.push(row);
-        this.rows.push( row );
         row.values(record);
     };
 
     this.removeRow = function (rowIndex) {
-        var row = this.rows.splice(rowIndex, 1)[0];
+        var row = this.members.splice(+rowIndex +1, 1)[0];
         row.node.parentNode.removeChild(row.node);
     };
 }~
+
+!alias GRID3 GRID2("NAME PHONE ADDR");
+!alias GRID4 GRID2("PHONE ADDR NAME");
 
 !rule setWidth {
     head_NAME NAME: width("40px");
@@ -163,7 +189,7 @@
 }
 
 !run {
-    window.grid = new engine.components.GRID2();
+    window.grid = engine.createComponent("GRID3");;
     document.body.appendChild(grid.node);
     grid.appendRow({NAME: 'San', PHONE: 123});
     grid.appendRow({NAME: 'Sam', PHONE: 58775890});

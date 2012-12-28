@@ -146,7 +146,7 @@ var
             'letter': function () {
                 //(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?\s*(?:{$([^\0]*?)^}|([^\0]*?)^~)
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                var match = /^(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?(?=\s*[{;])/.exec( input.substring(position_token) ),
+                var match = /^([A-Za-z_]\w*)(?:\s+([A-Za-z_]\w*))?(?:\s*:\s*([A-Za-z][\w#:.-]*))?(?=\s*{)/.exec( input.substring(position_token) ),
                     view, viewmatch, code, codematch;
 
                 if ( !match ) error("Incorrect format of defalias.");
@@ -176,7 +176,7 @@ var
 
         defalias: {
             'letter': function () {
-                var match = /^(\w[\d\w]*)\s+(\w[\d\w]*)/.exec( input.substring(position_token) ),
+                var match = /^([A-Za-z_]\w*)[\x20\t]+([A-Za-z_]\w*)/.exec( input.substring(position_token) ),
                     args;
 
                 if ( !match) error('Incorrect format of defalias.');
@@ -289,7 +289,7 @@ var
 
       if ( !element_expr ) element = document.createElement(defaultTag);
       else {
-          match = /^\s*(\w+)(?:#([\d\w-]+))?((?:\.[\d\w-]+)*)?((?:\:[\w-]+)*)?(?:&([\d\w\.-]+))?(?=\s|$)/.exec(element_expr);
+          match = /^\s*(\w+)(?:#([\w-]+))?((?:\.[\w-]+)*)?((?:\:[\w-]+)*)?(?:&([\w\.-]+))?(?=\s|$)/.exec(element_expr);
           element = document.createElement(match[1]);
 
           if (match[2]) {
@@ -307,7 +307,8 @@ var
       if (childNodes.length === 0) return;
 
       var i, len, e, match, lastIndex, docFrag, member, text, nodes = [],
-          regx = /{\s*@(\w[\d\w]*)\s*}/g;
+          // regx = /{\s*@(\w[\d\w]*)\s*}/g;
+          regx = /{{[\x20\t]*([A-Za-z_]\w*)(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*[\x20\t]*}}/g;
 
       for (i = 0, len = childNodes.length; i < len; i++) {
           nodes.push(childNodes[i]);
@@ -337,7 +338,12 @@ var
               if ( !docFrag ) docFrag = document.createDocumentFragment();
 
               members.push( member = new member() );
-              members[ member.name ] = member;
+
+              if (match[2]) members.id = match[2];
+              if (match[3]) {
+                  members.classes = match[3].substring(1).split(".");
+              }
+
               docFrag.appendChild( document.createTextNode( text.substring(lastIndex, match.index) ) );
               docFrag.appendChild( member.node );
           }
@@ -354,8 +360,8 @@ var
   defComponent = function (engine, name, inherit, elementExpr, view, code) {
 
       var Component = function (initargs) {
-          var node = ( this.node = createElement(this.elementExpr) );
-              members = ( this.members = [] );
+          var node = ( this.node = createElement(this.elementExpr) ),
+              members = ( this.members = new Query(this) );
 
           if (this.view) {
               node.innerHTML = this.view;
@@ -379,10 +385,12 @@ var
           }
       };
 
+      Component.prototype = new Engine.Component();
+
       if (inherit) extend( Component.prototype, inherit.prototype);
 
       if (code) {
-          ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule );
+          ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule);
       }
 
       extend( Component.prototype, { view: view, name: name, elementExpr: elementExpr } );
@@ -390,24 +398,15 @@ var
       return Component;
   },
 
-  defAlias = function (engine, name, component, args) {
+  defAlias = function (engine, name, component, predefinedargs) {
 
-      // return [name, component, args];
-
-      var Alias = function () {
-          var comp = new component(args);
+      return function (args) {
+          var comp = new component(args || predefinedargs || []);
           comp.name = name;
           
-          /*
-          if (comp.init) {
-              comp.init.apply( comp, args || []);
-          }
-          */
-
           return comp;
       };
 
-      return Alias;
   },
 
   /* Parse rule statements from text input. */
@@ -508,6 +507,150 @@ var
       this.name = name;
   },
 
+  Component = function () {
+  },
+
+  Query = (function () {
+
+  var
+    Query = function (list) {          
+        if ( this instanceof Query ) {
+            this.merge(list);
+        }
+    },
+
+    regx_selector = /^\s*(?:(\*)|([A-Za-z_]\w*)?(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*)\s*$/,
+    
+    parse_selectors = function (sel) {
+        var ls = sel.split('/'), i, len, e, sls = [];
+        
+        for (i = 0, len = ls.length; i < len; i++) {
+            e = ls[i];
+            sls.push( parse_selector(e) );
+        }
+
+        while ( sls.length > 1 ) {
+            e = sls.pop();
+            sls[ sls.length - 1 ].next = e;
+        }
+
+        return sls[0];
+    },
+
+    parse_selector = function (sel) {
+        var match = regx_selector.exec(sel), clzes;
+
+        if ( !match ) error("Invalid selector: " + sel);
+
+        if ( match[1] ) return {any: true};
+
+        clzes = match[4];
+        if (clzes) {
+            clzes = clzes.substring(1).split('.');
+        }
+
+        return {
+            name: match[2],
+            nick: match[3],
+            classes: clzes
+        };
+    },
+    
+    matchClasses = function (find, list) {
+        var count = 0, i, len, e;
+        // find every class of 'find' in 'list'.
+        if (find == null || find.length === 0) return true;
+        if (list == null || list.length === 0) return false;
+
+        for (i = 0, len = find.length; i < len; i++) {
+            if (list.indexOf( find[i] ) > -1) count ++;
+        }
+
+        return count === find.length;
+    };
+
+    Query.prototype = new Array();
+
+    extend( Query.prototype, {
+        /* Query components in this Query list by using selector 'sel'.
+         * 'sel' is either a selector format string or a parsed selector object.
+         * If 'index' passed, returned Query list contains only the Component indicated by index 'index'.
+         */
+        query: function (sel, index) {
+            var selector = ( typeof sel === 'string' ? parse_selectors(sel) : sel ),
+                ls = new Query(), i, len, e, ls2, next;
+
+            if (selector.any) {
+                ls.merge( this );
+
+            } else {
+                for (i = 0, len = this.length; i < len; i++) {
+                    e = this[i];
+                    if ( selector.name != null && e.name !== selector.name ) continue;
+                    if ( selector.nick != null && e.nick !== selector.nick ) continue;
+                    if ( ! matchClasses(selector.classes, e.classes) ) continue;
+                    ls.push(e);
+                }
+            }
+
+            if (selector.next) {
+                next = selector.next;
+                ls2 = new Query();
+
+                for (i = 0, len = ls.length; i < len; i++) {
+                    ls2.merge(ls[i].members.query( next ));
+                }
+
+                ls = ls2;
+            }
+
+            if ( typeof index === 'number' ) {
+                ls = new Query( index < ls.length ? [ ls[ index ] ] : undefined );
+            }
+
+            return ls;
+        },
+
+        /* Append all the elements in 'list' into this Query list. */
+        merge: function (list) {
+            this.push.apply(this, list);
+        },
+
+        /* Call function named 'fnName' of the Components in this Query list,
+         * using arguments in Array 'args'.
+         * If 'fnName' is a function, apply it on the Components.
+         */
+        applyFn: function (fnName, args) {
+            var i, len, e, fn;
+
+            if ( !args ) args = [];
+
+            for (i = 0, len = this.length; i < len; i++ ) {
+                e = this[i];
+                fn = typeof fnName === 'function' ? fnName : e[ fnName ];
+                if (fn) fn.apply(e, args);
+            }
+        },
+
+        /* Call function named 'fnName' of the Components in this Query list,
+         * using arguments passed after 'fnName'.
+         * If 'fnName' is a function, apply it on the Components.
+         */
+        callFn: function (fnName) {
+            var args = [], i, len, e, fn;
+
+            for (i = 1, len = arguments.length; i < len; i++) {
+                args.push( arguments[i] );
+            }
+
+            return this.applyFn(fnName, args);
+        }
+    });
+
+    return Query;
+
+  })(),
+
   Statement = function (names, calls) {
       this.names = names;
       this.calls = calls;
@@ -569,8 +712,8 @@ var
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
               ent = this.components[ e[1] ];
-              this.components[ e[0] ] = defComponent( this, e[0], ent, e[2], e[3], e[4] );
-              this.aliases[ e[0] ] = defAlias( this, e[0], ent, [] );
+              ent = this.components[ e[0] ] = defComponent( this, e[0], ent, e[2], e[3], e[4] );
+              this.aliases[ e[0] ] = defAlias( this, e[0], ent);
           }
 
           for (i = 0, len = aliases.length; i < len; i++) {
@@ -592,6 +735,32 @@ var
                   runfn.call(this, this, this.aliases, this.rules, Rule);
               };
           }// else this.run = function () {};
+      },
+
+      /* Create Component using passed arguments in list 'args'. */
+      createComponent: function (name, args) {
+          var c = this.aliases[ name ], instance, nick;
+          if ( !c ) error("Component " + name + " does not exist.");
+
+          if ( args != null && typeof args === 'string' ) {
+              nick = args;
+              args = arguments[2];
+          }
+
+          instance = new c(args);
+          if (nick) instance.nick = nick;
+
+          return instance;
+      }
+  });
+
+  extend( Component.prototype, {
+      toString: function () {
+          return [
+              this.name || '',
+              (this.nick ? ('#' + this.nick) : ''),
+              (this.classes && this.classes.length > 0 ? ('.' + this.classes.join('.')) : '')
+          ].join('');
       }
   });
 
@@ -698,6 +867,7 @@ var
   window.parse_script = parse_script;
   window.parse_rule = parse_rule;
   window.Vngin = Engine;
+  Engine.Component = Component;
   Engine.Rule = Rule;
   Engine.Statement = Statement;
 
