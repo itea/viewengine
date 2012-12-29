@@ -1,35 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <title>Vngin</title>
     <script type="text/javascript" src="viewengine.js"></script>
     <!-- <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script> -->
-    <script type="text/javascript" src="jquery-1.8.3.min.js"></script>
+    <script type="text/javascript" src="jquery-1.8.3.js"></script>
     <script type="text/javascript">
 function run() {
     window.sbug = document.getElementById('sbug').textContent;
     window.engine = new Vngin();
     try { engine.loadScript(sbug); } catch (e) { console.log(e.stack); }
-    var script_load = new engine.aliases.SCRIPT_LOAD();
+    var script_load = engine.createComponent("SCRIPT_LOAD");
     document.body.appendChild(script_load.node);
-    // var script = new engine.aliases.SCRIPT();
+    // var script = engine.createComponent("scriptBox");
     // document.body.appendChild(script.node);
 
-    /*
-    document.body.addEventListener('mousemove', function (event) {
-        console.log(event.button + ', ' + event.clientX);
-    });
-    */
 }
 window.addEventListener('load', run);
 
     </script>
     <script type="text/bug" id="sbug">
-!component scriptBox {
+!component scriptBox:
 <div>
     <textarea class="-vnc-textarea -vnc-scriptbox"></textarea>
     <input class="-vnc-button" type="button" value="RUN"/>
 </div>
-} {
+~ {
     this.init = function () {
         var _this = this;
         this.node.getElementsByClassName("-vnc-button")[0].addEventListener("click", function (evt) {
@@ -45,11 +41,11 @@ window.addEventListener('load', run);
     };
 }~
 
-!component ajaxLoad {
+!component ajaxLoad:
 <span>
   <input type="text" /><input type="button" value="LOAD"/>
 </span>
-} {
+~ {
     this.init = function (txt) {
         var _this = this;
         this.node.children[0].value = txt;
@@ -63,7 +59,6 @@ window.addEventListener('load', run);
     };
 }~
 
-!alias SCRIPT scriptBox;
 !alias SCRIPT_LOAD ajaxLoad("viewdemo.txt");
     </script>
     <style type="text/css">

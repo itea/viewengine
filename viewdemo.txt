@@ -1,5 +1,6 @@
-!component abstract_cell : td {
-} {
+!component abstract_cell:
+  <td></td>
+~ {
     this.width = function (value) {
         this.node.style.width = value;
     };
@@ -9,17 +10,20 @@
     };
 }~
 
-!component cell abstract_cell : td {
-} {
+!component cell abstract_cell:
+  <td></td>
+~ {
     this.value = function (value) {
         this.node.innerText = value;
     };
 
 }~
 
-!component inputCell abstract_cell: td {
+!component inputCell abstract_cell:
+<td>
     <input type="text" style="margin:0;padding:0;border:0;height:100%;width:100%;"/>
-} {
+</td>
+~ {
     this.init = function () {
         this.node.style.padding = '0';
         this.node.style.height = '20px';
@@ -33,10 +37,12 @@
     };
 }~
 
-!component headCell cell: th {
+!component headCell cell:
+<th>
     <span></span>
     <div style="position:absolute; right:0; top:0; width:2px; height:100%; cursor:e-resize;">&nbsp;</div>
-} {
+</th>
+~ {
     this.init = function () {
         this.node.style.position = 'relative';
         this.node.style.padding = '0px';
@@ -74,11 +80,13 @@
 !alias head_PHONE headCell;
 !alias head_ADDR headCell;
 
-!component ROW : tr {
+!component ROW:
+<tr>
     {{NAME.name}}
     {{PHONE#phone}}
     {{ADDR}}
-} {
+</tr>
+~ {
     this.values = function (values) {
 
         if (values === undefined)
@@ -95,8 +103,9 @@
     };
 }~
 
-!component DROW : tr {
-} {
+!component DROW:
+<tr></tr>
+~ {
     this.init = function (cellnames) {
         var cellNames = this.cellNames = [],
             that = this;
@@ -118,8 +127,9 @@
     };
 }~
 
-!component GRID1 : table {
-} {
+!component GRID1:
+<table></table>
+~ {
     this.appendRow = function (record) {
         var row = engine.createComponent("ROW");
         this.node.appendChild(row.node);
@@ -135,10 +145,12 @@
 
 !alias napROW DROW("NAME ADDR PHONE");
 
-!component GRID2 : table {
+!component GRID2:
+<table>
     <thead></thead>
     <tbody></tbody>
-} {
+</table>
+~ {
     this.init = function (columnNames) {
         this.columnNames = columnNames;
         this.thead = this.node.children[0];
@@ -147,16 +159,14 @@
         var headNames = columnNames.split(/\s+/).map(function (e, i) {
                 return 'head_' +  e;
             }).join(' '),
-            headRow = engine.createComponent("DROW", [ headNames ]);
+            headRow = engine.createComponent("DROW#head", [ headNames ]);
 
-        headRow.nick = "head";
         this.members.push(headRow);
         this.thead.appendChild(headRow.node);
     };
 
     this.appendRow = function (record) {
-        var row = engine.createComponent("DROW", [ this.columnNames ]);
-        row.classes = [ 'row' ];
+        var row = engine.createComponent("DROW.row", [ this.columnNames ]);
         this.tbody.appendChild(row.node);
         this.members.push(row);
         row.values(record);
@@ -172,20 +182,20 @@
 !alias GRID4 GRID2("PHONE ADDR NAME");
 
 !rule setWidth {
-    head_NAME NAME: width("40px");
-    head_PHONE PHONE: width("90px");
-    head_ADDR ADDR: width("80px");
+    */head_NAME */NAME: width("40px");
+    */head_PHONE */PHONE: width("90px");
+    */head_ADDR */ADDR: width("80px");
 }
 
 !rule setColor (color) {
-    NAME: color(color);
-    PHONE: color("green");
+    */NAME: color(color);
+    */PHONE: color("green");
 }
 
 !rule setHead {
-    head_NAME: value("NAME");
-    head_PHONE: value("PHONE");
-    head_ADDR: value("ADDR");
+    */head_NAME: value("NAME");
+    */head_PHONE: value("PHONE");
+    */head_ADDR: value("ADDR");
 }
 
 !run {

@@ -19,11 +19,22 @@ var
         },
 
   extend = function(target) {
-      var e, src, i, len;
+      var e, src, i = 1, len = arguments.length, keys, j, length, e;
 
-      for (i = 1, len = arguments.length; i < len; i++) {
+      if ( typeof arguments[ len -1 ] === "string" ) {
+          keys = trim(arguments[ len -1 ]).split(/\s+/);
+          if (keys[0] === '') keys = undefined;
+      }
+
+      for (; i < len; i++) {
           src = arguments[i];
-          for (e in src) {
+          if ( !src ) continue;
+
+          if (keys) for (j = 0, length = keys.length; j < length; j++) {
+              e = keys[j];
+              target[e] = src[e];
+
+          } else for (e in src) {
               target[e] = src[e];
           }
       }
@@ -144,20 +155,15 @@ var
 
         defcomponent: {
             'letter': function () {
-                //(\w[\d\w]*)(?:\s+(\w[\d\w]*))?(?:\s*:\s*(\w[\d\w#:.-]*))?\s*(?:{$([^\0]*?)^}|([^\0]*?)^~)
+
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                var match = /^([A-Za-z_]\w*)(?:\s+([A-Za-z_]\w*))?(?:\s*:\s*([A-Za-z][\w#:.-]*))?(?=\s*{)/.exec( input.substring(position_token) ),
-                    view, viewmatch, code, codematch;
+                //var match = /^([A-Za-z_]\w*)(?:\s+([A-Za-z_]\w*))?(?:\s*:\s*([A-Za-z][\w#:.-]*))?(?=\s*{)/.exec( input.substring(position_token) ),
+                var match = (/^([A-Za-z_]\w*)(?:[\x20\t]+([A-Za-z_]\w*))?[\x20\t]*:[\x20\t]*$(?:[\n\r]*([^\0]*?)[\n\r]*)^~/m).exec( input.substring(position_token) ),
+                    code, codematch;
 
                 if ( !match ) error("Incorrect format of defalias.");
 
                 move_forward( match[0].length );
-
-                viewmatch = (/^{$([^\0]*?)^}(?!~)/m).exec( input.substring(position_token) );
-                if (viewmatch) {
-                    view = viewmatch[1];
-                    move_forward( viewmatch[0].length );
-                }
 
                 codematch = (/^{$([^\0]*?)^}~/m).exec( input.substring(position_token) );
                 if (codematch) {
@@ -165,7 +171,7 @@ var
                     move_forward( codematch[0].length );
                 }
 
-                components.push([ match[1], match[2], match[3], view, code ]);
+                components.push([ match[1], match[2], match[3], code ]);
                 state = 'line';
             },
 
@@ -283,26 +289,43 @@ var
       return [ components, aliases, rules, runcode ];
   },
 
-  createElement = function (element_expr, defaultTag) {
-      var element, match;
-      if ( !defaultTag ) defaultTag = 'div';
-
-      if ( !element_expr ) element = document.createElement(defaultTag);
-      else {
-          match = /^\s*(\w+)(?:#([\w-]+))?((?:\.[\w-]+)*)?((?:\:[\w-]+)*)?(?:&([\w\.-]+))?(?=\s|$)/.exec(element_expr);
-          element = document.createElement(match[1]);
-
-          if (match[2]) {
-              element.setAttribute('id', match[2]);
-          }
-          if (match[3]) {
-              element.setAttribute('class', match[3].substring(1).replace(/\./, ' '));
-          }
+  regx_selector = /^\s*(?:(\*)|([A-Za-z_]\w*)?(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*)\s*$/,
+  
+  parse_selectors = function (sel) {
+      var ls = sel.split('/'), i, len, e, sls = [];
+      
+      for (i = 0, len = ls.length; i < len; i++) {
+          e = ls[i];
+          sls.push( parse_selector(e) );
       }
 
-      return element;
+      while ( sls.length > 1 ) {
+          e = sls.pop();
+          sls[ sls.length - 1 ].next = e;
+      }
+
+      return sls[0];
   },
 
+  parse_selector = function (sel) {
+      var match = regx_selector.exec(sel), clzes;
+
+      if ( !match ) error("Invalid selector: " + sel);
+
+      if ( match[1] ) return {any: true};
+
+      clzes = match[4];
+      if (clzes) {
+          clzes = clzes.substring(1).split('.');
+      }
+
+      return {
+          name: match[2],
+          nick: match[3],
+          classes: clzes
+      };
+  },
+    
   _build_view = function (childNodes, members, aliases, avoid) {
       if (childNodes.length === 0) return;
 
@@ -357,29 +380,16 @@ var
       }
   },
 
-  defComponent = function (engine, name, inherit, elementExpr, view, code) {
+  defComponent = function (engine, name, inherit, view, code, createView) {
 
       var Component = function (initargs) {
-          var node = ( this.node = createElement(this.elementExpr) ),
+          var node = ( this.node = createView(view) ),
               members = ( this.members = new Query(this) );
 
-          if (this.view) {
-              node.innerHTML = this.view;
-
+          if (node) {
               _build_view(node.childNodes, members, engine.aliases, name);
           }
 
-          if ( !this.elementExpr) {
-              if (node.children.length > 0) {
-                  node = node.children[0];
-              } else {
-                  node = node.firstChild;
-              }
-
-              if (node) node.parentNode.removeChild(node);
-              this.node = node;
-          }
-          
           if (this.init) {
               this.init.apply( this, initargs || []);
           }
@@ -393,7 +403,7 @@ var
           ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule);
       }
 
-      extend( Component.prototype, { view: view, name: name, elementExpr: elementExpr } );
+      extend( Component.prototype, { view: view, name: name } );
 
       return Component;
   },
@@ -421,7 +431,7 @@ var
               regx_token = /(?=[\S]|$)/g;
 
           while (true) {
-              match = /^([$\w][$\d\w]*)(?=[\s(;])/.exec( input.substring(position) );
+              match = /^([A-Za-z_$][\w$]*)(?=[\s(;])/.exec( input.substring(position) );
               if ( !match ) error("Incorrect format of rule.");
               
               ch = move_forward( match[0].length );
@@ -444,18 +454,18 @@ var
       actmap = {
         statement: {
             'letter': function () {
-                var match = /^((?:\w[\d\w]*\s*)+):/.exec( input.substring(position) ),
-                    names, calls;
+                var match = /^((?:(?:(\*)|([A-Za-z_]\w*)?(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*)(\s*|\/))+):/.exec( input.substring(position) ),
+                    selectors, calls;
                 if ( !match ) error("Incorrect format of rule.");
 
-                names = trim( match[1] ).split(/\s+/);
-                if (names[names.length] === "") names.pop();
+                selectors = trim( match[1] ).split(/\s+/);
+                if (selectors[selectors.length] === "") selectors.pop();
 
                 move_forward( match[0].length );
 
                 calls = parse_rule_calls();
 
-                statements.push( new Statement(names, calls) );
+                statements.push( new Statement(selectors, calls) );
             },
             
             'eof': function () {
@@ -486,7 +496,7 @@ var
           case ';':
               return ch;
           default:
-              if (/\w/.test(ch)) return 'letter';
+              if (/[\w*]/.test(ch)) return 'letter';
               error('Unexpected input');
           }
       },
@@ -519,43 +529,6 @@ var
         }
     },
 
-    regx_selector = /^\s*(?:(\*)|([A-Za-z_]\w*)?(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*)\s*$/,
-    
-    parse_selectors = function (sel) {
-        var ls = sel.split('/'), i, len, e, sls = [];
-        
-        for (i = 0, len = ls.length; i < len; i++) {
-            e = ls[i];
-            sls.push( parse_selector(e) );
-        }
-
-        while ( sls.length > 1 ) {
-            e = sls.pop();
-            sls[ sls.length - 1 ].next = e;
-        }
-
-        return sls[0];
-    },
-
-    parse_selector = function (sel) {
-        var match = regx_selector.exec(sel), clzes;
-
-        if ( !match ) error("Invalid selector: " + sel);
-
-        if ( match[1] ) return {any: true};
-
-        clzes = match[4];
-        if (clzes) {
-            clzes = clzes.substring(1).split('.');
-        }
-
-        return {
-            name: match[2],
-            nick: match[3],
-            classes: clzes
-        };
-    },
-    
     matchClasses = function (find, list) {
         var count = 0, i, len, e;
         // find every class of 'find' in 'list'.
@@ -651,8 +624,8 @@ var
 
   })(),
 
-  Statement = function (names, calls) {
-      this.names = names;
+  Statement = function (selectors, calls) {
+      this.selectors = selectors;
       this.calls = calls;
   },
 
@@ -663,45 +636,22 @@ var
       if (input) this.load(input);
   },
 
-  Engine = function () {
+  Engine = function (options) {
       this.components = {};
       this.aliases = {};
       this.rules = {};
-  },
 
-  /* This function traverse obj and build a name/instance index.
-   * index_mode indicate which mode index names build:
-   *   flat or F: drop hierarchy info, build a flat index. This is default.
-   *   hierarchy or H: build a hierarchy index, using slash indicate seprate.
-   *   shirt or S: shift hierarchy, shift hierarchy to left one level.
-   */
-  build_component_index = function (obj, index, index_mode) {
-      if ( !index_mode ) index_mode = 'flat';
-
-      if (obj.members) { // seems a group
-          var i = 0, len = obj.members.length;
-
-          for (; i < len; i++) {
-              build_component_index(obj.members[i], index);
-          }
-
-          if (obj.name) {
-              if ( !index[ obj.name ] ) index[ obj.name ] = [];
-              index[ obj.name ].push(obj);
-          }
-
-      } else { // like a leaf
-
-          if (obj.name) {
-              if ( !index[ obj.name ] ) index[ obj.name ] = [];
-              index[ obj.name ].push(obj);
-          }
-      }
+      // Merge options from prototype and the passed one.
+      this.options = extend( {}, this.options, options );
   };
 
   extend( Engine.prototype, {
+
+      options: {
+      },
+
       /* Load Script from text input. */
-      loadScript: function (input) {
+      loadScript: function (input, createView) {
           var ls = parse_script(input),
               components = ls[0],
               aliases = ls[1],
@@ -711,8 +661,9 @@ var
 
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
-              ent = this.components[ e[1] ];
-              ent = this.components[ e[0] ] = defComponent( this, e[0], ent, e[2], e[3], e[4] );
+              ent = this.components[ e[0] ]
+                  = defComponent( this, e[0], ent, e[2], e[3], createView || this.createView);
+
               this.aliases[ e[0] ] = defAlias( this, e[0], ent);
           }
 
@@ -738,29 +689,33 @@ var
       },
 
       /* Create Component using passed arguments in list 'args'. */
-      createComponent: function (name, args) {
-          var c = this.aliases[ name ], instance, nick;
-          if ( !c ) error("Component " + name + " does not exist.");
+      createComponent: function (sel, args) {
+          var selector = parse_selector( sel ),
+              c = this.aliases[ selector.name ], instance;
 
-          if ( args != null && typeof args === 'string' ) {
-              nick = args;
-              args = arguments[2];
-          }
+          if ( !c ) error("Component " + selector.name + " does not exist.");
 
           instance = new c(args);
-          if (nick) instance.nick = nick;
+          if (selector.nick) instance.nick = selector.nick;
+          if (selector.classes) instance.classes = selector.classes;
 
           return instance;
+      },
+
+      /* Create view(DOM) using view text. */
+      createView: function (view) {
+          return $(view)[0];
       }
   });
 
   extend( Component.prototype, {
+
       toString: function () {
           return [
-              this.name || '',
-              (this.nick ? ('#' + this.nick) : ''),
-              (this.classes && this.classes.length > 0 ? ('.' + this.classes.join('.')) : '')
-          ].join('');
+              this.name || "",
+              (this.nick ? ("#" + this.nick) : ""),
+              (this.classes && this.classes.length > 0 ? ("." + this.classes.join(".")) : "")
+          ].join("");
       }
   });
 
@@ -770,13 +725,13 @@ var
           this.statements.push.apply( this.statements, parse_rule(input) );
       },
 
-      appendStatement: function (names) {
+      appendStatement: function (selectors) {
           if (arguments.length < 2) error("Need at least 2 parameters.");
 
-          if (typeof names === 'string') {
-              names = trim(names).split(/\s+/);
+          if (typeof selectors === 'string') {
+              selectors = trim(selectors).split(/\s+/);
           } else {
-              names = names.slice(); // copy
+              selectors = selectors.slice(); // copy
           }
 
           var i = 0, len = arguments.length, arg, calls = [], call;
@@ -792,15 +747,12 @@ var
               }
           }
 
-          this.statements.push( new Statement(names, calls) );
+          this.statements.push( new Statement(selectors, calls) );
       },
 
       /* Apply the rule on certain object */
       apply: function (obj, args) {
-          var index = {}, i, len, e, names, calls, ctx = {};
-
-          /* First, build an index on the object. */
-          build_component_index( obj, index );
+          var i, len, e, ctx = {};
 
           /* If have argument names, build runtime context. */
           if ( this.argnames.length > 0 ) {
@@ -813,7 +765,7 @@ var
           /* Then apply the statements one by one. */
           for (i = 0, len = this.statements.length; i < len; i++) {
               e = this.statements[i];
-              e.exec(index, ctx);
+              e.exec(obj.members, ctx);
           }
       },
 
@@ -830,14 +782,13 @@ var
   });
 
   extend( Statement.prototype, {
-      exec: function (index, ctx) {
-          var names = this.names,
+      exec: function (members, ctx) {
+          var selectors = this.selectors,
               calls = this.calls,
-              objects = [], i, len, e;
+              objects = new Query(), i, len, e;
 
-          for (i = 0, len = names.length; i < len; i++) {
-              e = index[ names[i] ];
-              if (e) { objects.push.apply( objects, e ); }
+          for (i = 0, len = selectors.length; i < len; i++) {
+              objects.merge( members.query( selectors[i] ) );
           }
 
           forEach( calls, function (args) {
@@ -852,13 +803,7 @@ var
                   }
               }
 
-              for (i = 0, len = objects.length; i < len; i++) {
-                  obj = objects[i];
-
-                  if (obj[ fnname ]) {
-                      obj[ fnname ].apply( obj, args );
-                  }
-              }
+              objects.applyFn( fnname, args );
 
           });
       }
