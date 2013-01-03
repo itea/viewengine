@@ -1,4 +1,4 @@
-!component abstract_cell:
+defcomponent abstract_cell:
   <td></td>
 ~ {
     this.width = function (value) {
@@ -10,7 +10,7 @@
     };
 }~
 
-!component cell abstract_cell:
+defcomponent cell abstract_cell:
   <td></td>
 ~ {
     this.value = function (value) {
@@ -19,7 +19,7 @@
 
 }~
 
-!component inputCell abstract_cell:
+defcomponent inputCell abstract_cell:
 <td>
     <input type="text" style="margin:0;padding:0;border:0;height:100%;width:100%;"/>
 </td>
@@ -37,7 +37,54 @@
     };
 }~
 
-!component headCell cell:
+defcomponent advCell abstract_cell:
+<td class="cell cell-selected99">
+    <input type="text" class="cell-input" />
+    <div class="cell-mask"></div>
+</td>
+~ {
+    this.init = function () {
+        var _this = this,
+            _input = this._input = this.node.children[0],
+            _mask = this._mask = this.node.children[1];
+
+        this.node.component = this;
+
+        _mask.addEventListener("dblclick", function (event) {
+            _input.focus();
+        });
+
+        _input.addEventListener("focus", function (event) {
+            _this.editable(true);
+        });
+
+        _input.addEventListener("blur", function (event) {
+            _this.editable(false);
+        });
+    };
+
+    this.value = function (value) {
+        if (value === undefined)
+            return this._input.value;
+
+        this._input.value = value;
+    };
+
+    this.editable = function (yesno, focus) {
+        if (yesno) {
+            this.selected(0);
+            focus && this._input.focus();
+        } else {
+            this.selected(99);
+        }
+    };
+
+    this.selected = function (mode) {
+        this.node.className = this.node.className.replace(/\bcell-selected\d+\b/, "cell-selected" + mode);
+    };
+}~
+
+defcomponent headCell cell:
 <th>
     <span></span>
     <div style="position:absolute; right:0; top:0; width:2px; height:100%; cursor:e-resize;">&nbsp;</div>
@@ -72,21 +119,29 @@
     };
 }~
 
-!alias NAME inputCell;
-!alias PHONE inputCell;
-!alias ADDR inputCell;
+alias NAME advCell;
+alias PHONE advCell;
+alias ADDR advCell;
 
-!alias head_NAME headCell;
-!alias head_PHONE headCell;
-!alias head_ADDR headCell;
+alias head_NAME headCell;
+alias head_PHONE headCell;
+alias head_ADDR headCell;
 
-!component ROW:
-<tr>
-    {{NAME.name}}
-    {{PHONE#phone}}
-    {{ADDR}}
-</tr>
+defcomponent ROW:
+<tr></tr>
 ~ {
+    this.init = function () {
+        this.members.push( engine.createComponent("NAME.name") );
+        this.members.push( engine.createComponent("PHONE") );
+        this.members.push( engine.createComponent("ADDR") );
+
+        var node = this.node;
+        this.members.callFn( function () {
+            node.appendChild( this.node );
+        });
+
+    };
+
     this.values = function (values) {
 
         if (values === undefined)
@@ -103,7 +158,7 @@
     };
 }~
 
-!component DROW:
+defcomponent DROW:
 <tr></tr>
 ~ {
     this.init = function (cellnames) {
@@ -127,7 +182,7 @@
     };
 }~
 
-!component GRID1:
+defcomponent GRID1:
 <table></table>
 ~ {
     this.appendRow = function (record) {
@@ -143,15 +198,16 @@
     };
 }~
 
-!alias napROW DROW("NAME ADDR PHONE");
+alias napROW DROW("NAME ADDR PHONE");
 
-!component GRID2:
+defcomponent GRID2:
 <table>
     <thead></thead>
     <tbody></tbody>
 </table>
 ~ {
     this.init = function (columnNames) {
+        var _this = this;
         this.columnNames = columnNames;
         this.thead = this.node.children[0];
         this.tbody = this.node.children[1];
@@ -163,6 +219,18 @@
 
         this.members.push(headRow);
         this.thead.appendChild(headRow.node);
+
+        this.tbody.addEventListener("mousedown", function (event) {
+            var target = event.target;
+            while ( !target.component && target !== this)
+                target = target.parentNode;
+            target = target.component;
+            if (target) {
+                _this.selected && _this.selected.selected(99);
+                _this.selected = target;
+                target.selected(0);
+            }
+        });
     };
 
     this.appendRow = function (record) {
@@ -178,27 +246,27 @@
     };
 }~
 
-!alias GRID3 GRID2("NAME PHONE ADDR");
-!alias GRID4 GRID2("PHONE ADDR NAME");
+alias GRID3 GRID2("NAME PHONE ADDR");
+alias GRID4 GRID2("PHONE ADDR NAME");
 
-!rule setWidth {
+defrule setWidth {
     */head_NAME */NAME: width("40px");
     */head_PHONE */PHONE: width("90px");
     */head_ADDR */ADDR: width("80px");
 }
 
-!rule setColor (color) {
+defrule setColor (color) {
     */NAME: color(color);
     */PHONE: color("green");
 }
 
-!rule setHead {
+defrule setHead {
     */head_NAME: value("NAME");
     */head_PHONE: value("PHONE");
     */head_ADDR: value("ADDR");
 }
 
-!run {
+defrun {
     window.grid = engine.createComponent("GRID3");;
     document.body.appendChild(grid.node);
     grid.appendRow({NAME: 'San', PHONE: 123});

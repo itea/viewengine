@@ -5,18 +5,20 @@ var
       throw new Error(msg);
   },
 
+  noop = function () {},
+
   trim = String.prototype.trim ?
-        function (s) { return s == null ? null : s.trim(); } :
-        function (s) { return s == null ? null : s.replace(/^\s+|\s+$/, ""); },
+      function (s) { return s == null ? null : s.trim(); } :
+      function (s) { return s == null ? null : s.replace(/^\s+|\s+$/, ""); },
 
   forEach = Array.prototype.forEach ?
-        function (a, cbk, o) { a.forEach(cbk, o); } :
-        function (a, cbk, o) {
-            var i, len, e;
-            for (i = 0, len = a.length; i < len; i++) {
-                cbk.apply(o, e, i, a);
-            }
-        },
+      function (a, cbk, o) { a.forEach(cbk, o); } :
+      function (a, cbk, o) {
+          var i, len, e;
+          for (i = 0, len = a.length; i < len; i++) {
+              cbk.apply(o, e, i, a);
+          }
+      },
 
   extend = function(target) {
       var e, src, i = 1, len = arguments.length, keys, j, length, e;
@@ -129,7 +131,7 @@ var
             },
             
             '!alias': function () {
-                state = 'defalias';
+                state = 'alias';
             },
 
             '!rule': function () {
@@ -138,6 +140,21 @@ var
 
             '!run': function () {
                 state = 'defrun';
+            },
+
+            'letter': function () {
+                var cmd = input.substring(position_token ).split(/\s/, 1)[0];
+                switch (cmd) {
+                case "defcomponent":
+                case "alias":
+                case "defrule":
+                case "defrun":
+                    break;
+                default:
+                    error("Unkonw command: " + cmd);
+                }
+                move_forward( cmd.length );
+                state = cmd;
             },
 
             '#': function () {
@@ -157,7 +174,6 @@ var
             'letter': function () {
 
                 /* The format is: <name> <inherit name> [:<enclosing tag name)] */
-                //var match = /^([A-Za-z_]\w*)(?:\s+([A-Za-z_]\w*))?(?:\s*:\s*([A-Za-z][\w#:.-]*))?(?=\s*{)/.exec( input.substring(position_token) ),
                 var match = (/^([A-Za-z_]\w*)(?:[\x20\t]+([A-Za-z_]\w*))?[\x20\t]*:[\x20\t]*$(?:[\n\r]*([^\0]*?)[\n\r]*)^~/m).exec( input.substring(position_token) ),
                     code, codematch;
 
@@ -180,7 +196,7 @@ var
             }
         },
 
-        defalias: {
+        alias: {
             'letter': function () {
                 var match = /^([A-Za-z_]\w*)[\x20\t]+([A-Za-z_]\w*)/.exec( input.substring(position_token) ),
                     args;
@@ -273,7 +289,7 @@ var
           case '{':
               return ch;
           default:
-              if (/\w/.test(ch)) return 'letter';
+              if (/[A-Za-z]/.test(ch)) return 'letter';
               error('Unexpected input: ' + ch);
           }
       },
@@ -326,12 +342,12 @@ var
       };
   },
     
-  _build_view = function (childNodes, members, aliases, avoid) {
+  _build_view = function (childNodes, members, engine, avoid) {
       if (childNodes.length === 0) return;
 
       var i, len, e, match, lastIndex, docFrag, member, text, nodes = [],
           // regx = /{\s*@(\w[\d\w]*)\s*}/g;
-          regx = /{{[\x20\t]*([A-Za-z_]\w*)(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*[\x20\t]*}}/g;
+          regx = /{{[\x20\t]*(([A-Za-z_]\w*)(?:#([A-Za-z_]\w*))?(\.[A-Za-z_]\w*)*)[\x20\t]*}}/g;
 
       for (i = 0, len = childNodes.length; i < len; i++) {
           nodes.push(childNodes[i]);
@@ -341,7 +357,7 @@ var
           e = nodes[i];
 
           if ( e.nodeType === 1 ) {
-              _build_view( e.childNodes, members, aliases, avoid );
+              _build_view( e.childNodes, members, engine, avoid );
               continue;
           }
           if ( e.nodeType !== 3 ) continue;
@@ -355,17 +371,10 @@ var
               /* avoid the component include itself */
               if ( match[1] === avoid ) error("A component cannot include itself.");
 
-              member = aliases[ match[1] ];
+              member = engine.createComponents( match[1] );
+              members.push( member );
 
-              if ( !member ) error( "Cannot find: " + match[1] );
               if ( !docFrag ) docFrag = document.createDocumentFragment();
-
-              members.push( member = new member() );
-
-              if (match[2]) members.id = match[2];
-              if (match[3]) {
-                  members.classes = match[3].substring(1).split(".");
-              }
 
               docFrag.appendChild( document.createTextNode( text.substring(lastIndex, match.index) ) );
               docFrag.appendChild( member.node );
@@ -387,7 +396,7 @@ var
               members = ( this.members = new Query(this) );
 
           if (node) {
-              _build_view(node.childNodes, members, engine.aliases, name);
+              _build_view(node.childNodes, members, engine, name);
           }
 
           if (this.init) {
@@ -403,7 +412,9 @@ var
           ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule);
       }
 
-      extend( Component.prototype, { view: view, name: name } );
+      extend( Component.prototype, { name: name } );
+
+      if (view) Component.prototype.view = view;
 
       return Component;
   },
@@ -496,7 +507,7 @@ var
           case ';':
               return ch;
           default:
-              if (/[\w*]/.test(ch)) return 'letter';
+              if (/[A-Za-z*]/.test(ch)) return 'letter';
               error('Unexpected input');
           }
       },
@@ -642,16 +653,34 @@ var
       this.rules = {};
 
       // Merge options from prototype and the passed one.
-      this.options = extend( {}, this.options, options );
+      this.options = extend( {}, defaultEngineOptions, options );
+
+      if ( typeof this.options.viewBuilder === "string" ) {
+          this.options.viewBuilder = viewBuilders[ this.options.viewBuilder ];
+          if (this.options.viewBuilder == null)
+              error("Non existence viewBuilder: " + options.viewBuilder);
+      }
+
+  },
+
+  defaultEngineOptions = {},
+  
+  viewBuilders = {
+
+      jQuery: function (view) {
+          return view == null ? null : jQuery(view)[0];
+      },
+
+      error: function (view) {
+          if (view) error( "No viewBuilder specified." );
+          return null;
+      }
   };
 
   extend( Engine.prototype, {
 
-      options: {
-      },
-
       /* Load Script from text input. */
-      loadScript: function (input, createView) {
+      loadScript: function (input, viewBuilder) {
           var ls = parse_script(input),
               components = ls[0],
               aliases = ls[1],
@@ -659,10 +688,17 @@ var
               runcode = ls[3],
               i, len, e, ent;
 
+          if (viewBuilder == null)
+              viewBuilder = this.options.viewBuilder;
+
+          else if (typeof viewBuilder === "string")
+              viewBuilder = viewBuilders[ viewBuilder ] || viewBuilders[ "error" ];
+
           for (i = 0, len = components.length; i < len; i++) {
               e = components[i];
+              ent = this.components[ e[1] ];
               ent = this.components[ e[0] ]
-                  = defComponent( this, e[0], ent, e[2], e[3], createView || this.createView);
+                  = defComponent( this, e[0], ent, e[2], e[3], viewBuilder);
 
               this.aliases[ e[0] ] = defAlias( this, e[0], ent);
           }
@@ -681,11 +717,11 @@ var
           }
 
           if (runcode) {
-              var runfn = new Function("engine", "aliases", "rules", "Rule", runcode);
+              var runfn = new Function("engine", runcode);
               this.run = function () {
-                  runfn.call(this, this, this.aliases, this.rules, Rule);
+                  runfn.call(null, this); 
               };
-          }// else this.run = function () {};
+          }
       },
 
       /* Create Component using passed arguments in list 'args'. */
@@ -695,20 +731,19 @@ var
 
           if ( !c ) error("Component " + selector.name + " does not exist.");
 
-          instance = new c(args);
+          instance = c(args);
           if (selector.nick) instance.nick = selector.nick;
           if (selector.classes) instance.classes = selector.classes;
 
           return instance;
-      },
-
-      /* Create view(DOM) using view text. */
-      createView: function (view) {
-          return $(view)[0];
       }
   });
 
   extend( Component.prototype, {
+
+      queryMembers: function (sel, index) {
+          return this.members.query(sel, index);
+      },
 
       toString: function () {
           return [

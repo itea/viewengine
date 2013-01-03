@@ -8,7 +8,7 @@
     <script type="text/javascript">
 function run() {
     window.sbug = document.getElementById('sbug').textContent;
-    window.engine = new Vngin();
+    window.engine = new Vngin({viewBuilder: "jQuery"});
     try { engine.loadScript(sbug); } catch (e) { console.log(e.stack); }
     var script_load = engine.createComponent("SCRIPT_LOAD");
     document.body.appendChild(script_load.node);
@@ -20,7 +20,7 @@ window.addEventListener('load', run);
 
     </script>
     <script type="text/bug" id="sbug">
-!component scriptBox:
+defcomponent scriptBox:
 <div>
     <textarea class="-vnc-textarea -vnc-scriptbox"></textarea>
     <input class="-vnc-button" type="button" value="RUN"/>
@@ -41,7 +41,7 @@ window.addEventListener('load', run);
     };
 }~
 
-!component ajaxLoad:
+defcomponent ajaxLoad:
 <span>
   <input type="text" /><input type="button" value="LOAD"/>
 </span>
@@ -59,7 +59,7 @@ window.addEventListener('load', run);
     };
 }~
 
-!alias SCRIPT_LOAD ajaxLoad("viewdemo.txt");
+alias SCRIPT_LOAD ajaxLoad("viewdemo.txt");
     </script>
     <style type="text/css">
 body {font:12px Myriad,Helvetica,Tahoma,Arial,clean,sans-serif;}
@@ -72,6 +72,30 @@ body {font:12px Myriad,Helvetica,Tahoma,Arial,clean,sans-serif;}
 table {border-collapse:collapse;}
 table, th, td {border: 1px solid silver;}
 
+.cell {position: relative; padding: 0px; height: 20px;}
+.cell-mask {margin:0;padding:0;border:0;height:100%;width:100%;position:absolute;left:0;top:0;z-index:1;}
+.cell-input {margin:0;padding:0;border:0;height:100%;width:100%;position:relative;top:0;left:0;}
+.cell-input:focus {z-index:2;}
+.cell-selected0 .cell-mask{left:-2px;top:-2px;border:2px solid #00DD00;}
+.cell-selected1 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent #00DD00;}
+.cell-selected2 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent transparent;}
+.cell-selected3 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 #00DD00 transparent transparent;}
+.cell-selected4 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent transparent #00DD00;}
+.cell-selected5 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent;}
+.cell-selected6 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 transparent transparent;}
+.cell-selected7 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 #00DD00;}
+.cell-selected8 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 transparent;}
+.cell-selected9 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 #00DD00 transparent;}
+.cell-selected0 .cell-input,
+.cell-selected1 .cell-input,
+.cell-selected2 .cell-input,
+.cell-selected3 .cell-input,
+.cell-selected4 .cell-input,
+.cell-selected5 .cell-input,
+.cell-selected6 .cell-input,
+.cell-selected7 .cell-input,
+.cell-selected8 .cell-input,
+.cell-selected9 .cell-input {background-color:#EEFFEE;}
     </style>
 </head>
 <body>
