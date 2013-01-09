@@ -46,20 +46,36 @@ defcomponent ajaxLoad:
   <input type="text" /><input type="button" value="LOAD"/>
 </span>
 ~ {
+    var load = function (url) {
+        $.get(url).success(function (input) {
+            engine.loadScript(input);
+            engine.run && engine.run();
+        });
+    };
+
     this.init = function (txt) {
-        var _this = this;
-        this.node.children[0].value = txt;
-        this.node.children[1].addEventListener("click", function (event) {
-            var url = _this.node.children[0].value;
-            $.get(url).success(function (input) {
-                engine.loadScript(input);
-                engine.run && engine.run();
+        var _this = this,
+            ls = (txt || '').split(/\s+/);
+
+        ls.forEach(function (e, i) {
+            if ( !e ) return;
+
+            var button = document.createElement('input');
+            button.setAttribute("type", "button");
+            button.value = e;
+            button.addEventListener("click", function (event) {
+                load( this.value );
             });
+            _this.node.appendChild(button);
+        });
+
+        this.node.children[1].addEventListener("click", function (event) {
+            load( _this.node.children[0].value );
         });
     };
 }~
 
-alias SCRIPT_LOAD ajaxLoad("viewdemo.txt");
+alias SCRIPT_LOAD ajaxLoad("viewdemo.txt viewsheet.txt");
     </script>
     <style type="text/css">
 body {font:12px Myriad,Helvetica,Tahoma,Arial,clean,sans-serif;}
@@ -76,16 +92,23 @@ table, th, td {border: 1px solid silver;}
 .cell-mask {margin:0;padding:0;border:0;height:100%;width:100%;position:absolute;left:0;top:0;z-index:1;}
 .cell-input {margin:0;padding:0;border:0;height:100%;width:100%;position:relative;top:0;left:0;}
 .cell-input:focus {z-index:2;}
-.cell-selected0 .cell-mask{left:-2px;top:-2px;border:2px solid #00DD00;}
-.cell-selected1 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent #00DD00;}
-.cell-selected2 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent transparent;}
-.cell-selected3 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 #00DD00 transparent transparent;}
-.cell-selected4 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent transparent #00DD00;}
-.cell-selected5 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent;}
-.cell-selected6 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 transparent transparent;}
-.cell-selected7 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 #00DD00;}
-.cell-selected8 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 transparent;}
-.cell-selected9 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 #00DD00 transparent;}
+.cell-selected0  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent;}
+.cell-selected1  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent transparent #00DD00;}
+.cell-selected2  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 transparent;}
+.cell-selected3  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent transparent #00DD00 #00DD00;}
+.cell-selected4  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 transparent transparent;}
+.cell-selected5  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 transparent #00DD00;}
+.cell-selected6  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 #00DD00 transparent;}
+.cell-selected7  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:transparent #00DD00 #00DD00 #00DD00;}
+.cell-selected8  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent transparent;}
+.cell-selected9  .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent transparent #00DD00;}
+.cell-selected10 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent #00DD00 transparent;}
+.cell-selected11 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 transparent #00DD00 #00DD00;}
+.cell-selected12 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 #00DD00 transparent transparent;}
+.cell-selected13 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 #00DD00 transparent #00DD00;}
+.cell-selected14 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00 #00DD00 #00DD00 transparent;}
+.cell-selected15 .cell-mask{left:-2px;top:-2px;border-width:2px;border-style:solid;border-color:#00DD00;}
+/*.cell-selected16 .cell-mask{left:-2px;top:-2px;border:2px solid #00DD00;}*/
 .cell-selected0 .cell-input,
 .cell-selected1 .cell-input,
 .cell-selected2 .cell-input,
@@ -95,7 +118,13 @@ table, th, td {border: 1px solid silver;}
 .cell-selected6 .cell-input,
 .cell-selected7 .cell-input,
 .cell-selected8 .cell-input,
-.cell-selected9 .cell-input {background-color:#EEFFEE;}
+.cell-selected9 .cell-input,
+.cell-selected10 .cell-input,
+.cell-selected11 .cell-input,
+.cell-selected12 .cell-input,
+.cell-selected13 .cell-input,
+.cell-selected14 .cell-input,
+.cell-selected15 .cell-input {background-color:#EEFFEE;}
     </style>
 </head>
 <body>

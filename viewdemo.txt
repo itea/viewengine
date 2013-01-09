@@ -220,6 +220,7 @@ defcomponent GRID2:
         this.members.push(headRow);
         this.thead.appendChild(headRow.node);
 
+        /*
         this.tbody.addEventListener("mousedown", function (event) {
             var target = event.target;
             while ( !target.component && target !== this)
@@ -231,6 +232,7 @@ defcomponent GRID2:
                 target.selected(0);
             }
         });
+        */
     };
 
     this.appendRow = function (record) {

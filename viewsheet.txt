@@ -1,0 +1,394 @@
+defcomponent abstract_cell:
+  <td></td>
+~ {
+    this.width = function (value) {
+        this.node.style.width = value;
+    };
+
+    this.color = function (value) {
+        this.node.style.color = value;
+    };
+}~
+
+defcomponent cell abstract_cell:
+  <td></td>
+~ {
+    this.value = function (value) {
+        this.node.innerText = value;
+    };
+
+}~
+
+defcomponent advCell abstract_cell:
+<td class="cell cell-selected99">
+    <input type="text" class="cell-input" />
+    <div class="cell-mask"></div>
+</td>
+~ {
+    this.init = function () {
+        var _this = this,
+            _input = this._input = this.node.children[0],
+            _mask = this._mask = this.node.children[1];
+
+        this.node.component = this;
+
+        _mask.addEventListener("dblclick", function (event) {
+            _input.focus();
+        });
+
+        _input.addEventListener("focus", function (event) {
+            _this.editable(true);
+        });
+
+        _input.addEventListener("blur", function (event) {
+            _this.editable(false);
+        });
+    };
+
+    this.width = function (value) {
+        this.node.style.width = value;
+    };
+
+    this.value = function (value) {
+        if (value === undefined)
+            return this._input.value;
+
+        this._input.value = value;
+    };
+
+    this.editable = function (yesno, focus) {
+        if (yesno) {
+            this.selected(15);
+            focus && this._input.focus();
+        } else {
+            this.selected(99);
+        }
+    };
+
+    this.selected = function (mode) {
+        this.node.className = this.node.className.replace(/\bcell-selected\d+\b/, "cell-selected" + mode);
+    };
+
+    this.getDimension = function () {
+        return {
+            width: this.node.offsetWidth,
+            height: this.node.offsetHeight,
+            left: this.node.offsetLeft,
+            top: this.node.offsetTop,
+            component: this
+        };
+    };
+}~
+
+defcomponent headCell cell:
+<th>
+    <span></span>
+    <div style="position:absolute; right:0; top:0; width:3px; height:100%; cursor:e-resize;"></div>
+</th>
+~ {
+    this.init = function () {
+        this.node.style.position = 'relative';
+        this.node.style.padding = '0px';
+
+        var bar = this.node.children[1], x, orignWidth,
+            move = function (event) {
+                var diffx = event.clientX - x;
+                bar.parentNode.style.width = (orignWidth + diffx) + 'px';
+            },
+
+            up = function (event) {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+            };
+
+        bar.addEventListener('mousedown', function (event) {
+            orignWidth = parseInt(bar.parentNode.clientWidth);
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+            x = event.clientX;
+        });
+
+    };
+
+    this.value = function (value) {
+        this.node.children[0].innerText = value;
+    };
+}~
+
+defcomponent vheadCell headCell:
+<th>
+    <span></span>
+    <div style="position:absolute; bottom:0; left:0; width:100%; height:3px; cursor:n-resize;"></div>
+</th>
+~ {
+    this.init = function () {
+        this.node.style.position = 'relative';
+        this.node.style.padding = '0px';
+
+        var bar = this.node.children[1], y, originHeight,
+            move = function (event) {
+                var diffy = event.clientY - y;
+                bar.parentNode.style.height = (originHeight + diffy) + 'px';
+            },
+
+            up = function (event) {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+            };
+
+        bar.addEventListener('mousedown', function (event) {
+            originHeight = parseInt(bar.parentNode.clientHeight);
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+            y = event.clientY;
+        });
+
+    };
+}~
+
+defcomponent DROW:
+<tr></tr>
+~ {
+    this.init = function (first, others, othersnum, nickappendix) {
+        var cell, that = this;
+
+        this.othersName = others;
+
+        cell = engine.createComponent(first);
+        cell.nick = "first";
+        this.members.push(cell);
+        this.node.appendChild(cell.node);
+
+        for (i = 0; i < othersnum; i++) {
+            cell = engine.createComponent(others);
+            cell.nick = String.fromCharCode(65 + i) + (nickappendix != null ? nickappendix : "");
+            cell.classes = ["other"];
+            that.members.push(cell);
+            that.node.appendChild(cell.node);
+            that.members[ cell.nick ] = cell;
+        };
+    };
+
+    this.values = function (values) {
+        var that = this;
+        this.cellNames.forEach(function (e, i) {
+            that.members[ e ].value( values[e] );
+        });
+    };
+}~
+
+defcomponent GRID2:
+<table style="-webkit-user-select:none;">
+    <thead></thead>
+    <tbody></tbody>
+</table>
+~ {
+  var
+    regx = /^([A-Z])(\d+)$/,
+
+    buildMatrix = function (startx, starty, endx, endy, zero) {
+        var diffx = Math.abs(startx - endx),
+            diffy = Math.abs(starty - endy),
+            minx = Math.min(startx, endx),
+            miny = Math.min(starty, endy),
+            i, j, matrix = [], matrixLen = (diffx + 1) * (diffy +1);
+
+        matrix.rowcount = diffy +1;
+        matrix.columncount = diffx +1;
+        matrix.minx = minx;
+        matrix.miny = miny;
+
+        zero = zero ? 99 : 0;
+        // initialize matrix
+        for (i = 0; i < matrixLen; i++) matrix[i] = zero;
+
+        if (zero) return matrix;
+
+        // assign the top border
+        for (i = 0; i <= diffx; i++) matrix[i] += 8;
+
+        // assign the bottom border
+        j = diffy * (diffx +1) ;
+        for (i = 0; i <= diffx; i++) matrix[j + i] += 2;
+
+        // assign the left border
+        j = diffx + 1;
+        for (i = 0; i <= diffy; i++) matrix[j * i] += 1;
+
+        // assign the right border
+        j = diffx + 1;
+        for (i = 0; i <= diffy; i++) matrix[j * (i + 1) - 1] += 4;
+
+        return matrix;
+    },
+
+    mergeMatrix = function (matrixbig, matrixsmall) {
+        var matrix = matrixbig.slice(),
+            // start point
+            x = matrixsmall.minx - matrixbig.minx,
+            y = matrixsmall.miny - matrixbig.miny,
+            countx = matrixsmall.columncount,
+            county = matrixsmall.rowcount,
+            diffx = matrixbig.columncount - matrixsmall.columncount,
+            diffy = matrixbig.rowcount - matrixsmall.rowcount,
+            i, j, e;
+
+        for (i = 0; i < countx; i++)
+            for (j = 0; j < county; j++) {
+                matrix[ matrixbig.columncount * (y + j) + x + i]
+                  = matrixsmall[ j * countx + i ];
+            }
+
+        matrix.minx = matrixbig.minx;
+        matrix.miny = matrixbig.miny;
+        matrix.columncount = matrixbig.columncount;
+        matrix.rowcount = matrixbig.rowcount;
+        return matrix;
+    },
+
+    selectMatrix = function (cellIdx, start, current, last) {
+        var matchStart = regx.exec(start.nick),
+            matchCurr = regx.exec(current.nick),
+            matchLast = regx.exec(last.nick),
+            startx = matchStart[1].charCodeAt(0),
+            starty = +matchStart[2],
+            currentx = matchCurr[1].charCodeAt(0),
+            currenty = +matchCurr[2],
+            lastx = matchLast[1].charCodeAt(0),
+            lasty = +matchLast[2],
+            diffx = Math.abs(startx - currentx) + 1,
+            diffy = Math.abs(starty - currenty) + 1,
+            minx = Math.min(startx, currentx),
+            miny = Math.min(starty, currenty),
+            i, j, e, matrix, matrix2, matrix3,
+            selected = new Query();
+
+        matrix = buildMatrix(startx, starty, currentx, currenty);
+        matrix2 = buildMatrix(startx, starty, lastx, lasty, true);
+
+        if (matrix2.length > matrix.length) {
+            // need merge
+            matrix3 = mergeMatrix(matrix2, matrix);
+            minx = matrix3.minx;
+            miny = matrix3.miny;
+            diffx = matrix3.columncount;
+            diffy = matrix3.rowcount;
+            matrix = matrix3;
+        }
+
+        for (i = 0; i < diffx; i++)
+            for (j = 0; j < diffy; j++) {
+                e = cellIdx[String.fromCharCode(minx + i) + (j + miny)];
+                selected.push(e);
+                e.selected(matrix[ j * diffx + i]);
+            }
+
+        return selected;
+    };
+
+    this.init = function (columns, rows) {
+        var _this = this;
+        this.thead = this.node.children[0];
+        this.tbody = this.node.children[1];
+
+        var headRow = engine.createComponent("DROW#head", [ "headCell", "headCell", 5 ]);
+
+        this.members.push(headRow);
+        this.thead.appendChild(headRow.node);
+
+        this.tbody.addEventListener("mousedown", function (event) {
+            var target = event.target, cellIdx = {},
+                moveStart, moveLast,
+                fnmmove, fnmup;
+
+            if (event.button != 0) return;
+
+            while ( !target.component && target !== this)
+                target = target.parentNode;
+            target = target.component;
+
+            if (target) {
+                _this.selected && _this.selected.callFn("selected", 99);
+                _this.selected = new Query([ moveStart = moveLast = target ]);
+                target.selected(15);
+
+                fnmmove = function (event) {
+                    var target = event.target;
+
+                    while ( !target.component && target !== this)
+                        target = target.parentNode;
+                    target = target.component;
+
+                    if (target && target !== moveLast) {
+                        _this.selected = selectMatrix(cellIdx, moveStart, target, moveLast);
+                        moveLast = target;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                }
+                _this.tbody.addEventListener("mousemove", fnmmove);
+
+                fnmup = function (event) {
+                    _this.tbody.removeEventListener("mousemove", fnmmove);
+                    document.removeEventListener("mouseup", fnmup);
+                }
+                document.addEventListener("mouseup", fnmup);
+
+                grid.queryMembers("*/advCell").callFn(function () {
+                    cellIdx[ this.nick ] = this;
+                });
+            }
+        });
+    };
+
+    this.appendRow = function (record) {
+        var row = engine.createComponent("DROW.row", [ "vheadCell", "advCell", 5, this.members.length ]);
+        this.tbody.appendChild(row.node);
+        this.members.push(row);
+        row.queryMembers('#first').callFn("value", this.members.length -1);
+    };
+
+    this.removeRow = function (rowIndex) {
+        var row = this.members.splice(+rowIndex +1, 1)[0];
+        row.node.parentNode.removeChild(row.node);
+    };
+}~
+
+alias GRID3 GRID2("NAME PHONE ADDR");
+alias GRID4 GRID2("PHONE ADDR NAME");
+
+defrule setWidth {
+    */*: width("1px");
+}
+
+defrule setWidth2 {
+    #head/.other: width("80px");
+    #head/#first: width("20px");
+}
+
+defrule setColor (color) {
+    */NAME: color(color);
+    */PHONE: color("green");
+}
+
+defrule setHead {
+    #head/#A: value("A");
+    #head/#B: value("B");
+    #head/#C: value("C");
+    #head/#D: value("D");
+    #head/#E: value("E");
+    #head/#F: value("F");
+}
+
+defrun {
+    window.grid = engine.createComponent("GRID3");;
+    document.body.appendChild(grid.node);
+    grid.appendRow({NAME: 'San', PHONE: 123});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775890});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775891});
+    grid.appendRow({NAME: 'Sam', PHONE: 58775892});
+    engine.rules.setWidth.apply(grid);
+    engine.rules.setWidth2.apply(grid);
+    engine.rules.setHead.apply(grid);
+}~

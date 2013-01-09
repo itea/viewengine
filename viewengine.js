@@ -409,7 +409,7 @@ var
       if (inherit) extend( Component.prototype, inherit.prototype);
 
       if (code) {
-          ( new Function("engine", "Rule", code) ).call( Component.prototype, engine, Rule);
+          ( new Function("engine", "Rule", "Query", code) ).call( Component.prototype, engine, Rule, Query);
       }
 
       extend( Component.prototype, { name: name } );
@@ -507,7 +507,7 @@ var
           case ';':
               return ch;
           default:
-              if (/[A-Za-z*]/.test(ch)) return 'letter';
+              if (/[A-Za-z*#.]/.test(ch)) return 'letter';
               error('Unexpected input');
           }
       },
