@@ -32,10 +32,6 @@ defcomponent advCell abstract_cell:
 
         this.node.component = this;
 
-        _mask.addEventListener("dblclick", function (event) {
-            _input.focus();
-        });
-
         _input.addEventListener("focus", function (event) {
             _this.editable(true);
         });
@@ -159,14 +155,7 @@ defcomponent DROW:
         this.members.push(cell);
         this.node.appendChild(cell.node);
 
-        for (i = 0; i < othersnum; i++) {
-            cell = engine.createComponent(others);
-            cell.nick = String.fromCharCode(65 + i) + (nickappendix != null ? nickappendix : "");
-            cell.classes = ["other"];
-            that.members.push(cell);
-            that.node.appendChild(cell.node);
-            that.members[ cell.nick ] = cell;
-        };
+        this.addCell(others, othersnum, nickappendix);
     };
 
     this.values = function (values) {
@@ -174,6 +163,19 @@ defcomponent DROW:
         this.cellNames.forEach(function (e, i) {
             that.members[ e ].value( values[e] );
         });
+    };
+
+    this.addCell = function (others, number, nickappendix) {
+        var i, cell;
+        for (i = 0; i < number; i++) {
+            cell = engine.createComponent(others);
+            cell.nick = String.fromCharCode(64 + this.members.length) + (nickappendix != null ? nickappendix : "");
+            cell.classes = ["other"];
+            this.members.push(cell);
+            this.node.appendChild(cell.node);
+            this.members[ cell.nick ] = cell;
+            cell.width("1px");
+        };
     };
 }~
 
@@ -260,11 +262,15 @@ defcomponent GRID2:
             diffy = Math.abs(starty - currenty) + 1,
             minx = Math.min(startx, currentx),
             miny = Math.min(starty, currenty),
-            i, j, e, matrix, matrix2, matrix3,
+            i, j, e, mode, matrix, matrix2, matrix3,
             selected = new Query();
 
         matrix = buildMatrix(startx, starty, currentx, currenty);
-        matrix2 = buildMatrix(startx, starty, lastx, lasty, true);
+        matrix2 = buildMatrix(
+            Math.min(startx, currentx, lastx),
+            Math.min(starty, currenty, lasty),
+            Math.max(startx, currentx, lastx),
+            Math.max(starty, currenty, lasty), true);
 
         if (matrix2.length > matrix.length) {
             // need merge
@@ -279,25 +285,54 @@ defcomponent GRID2:
         for (i = 0; i < diffx; i++)
             for (j = 0; j < diffy; j++) {
                 e = cellIdx[String.fromCharCode(minx + i) + (j + miny)];
-                selected.push(e);
-                e.selected(matrix[ j * diffx + i]);
+                e.selected(mode = matrix[ j * diffx + i]);
+                if (mode < 16) selected.push(e);
             }
 
         return selected;
     };
 
     this.init = function (columns, rows) {
-        var _this = this;
+        var _this = this, i=0;
         this.thead = this.node.children[0];
         this.tbody = this.node.children[1];
 
-        var headRow = engine.createComponent("DROW#head", [ "headCell", "headCell", 5 ]);
+        var headRow = engine.createComponent("DROW#head", [ "headCell", "headCell", columns ]);
 
         this.members.push(headRow);
         this.thead.appendChild(headRow.node);
+        headRow.queryMembers(".other").callFn(function () {
+            this.value( String.fromCharCode(65 + i++) );
+        });
+
+        this.addRow(rows);
+
+        this.tbody.addEventListener("dblclick", function (event) {
+            var target = event.target;
+            if (event.button != 0) return;
+
+            while ( !target.component && target !== this)
+                target = target.parentNode;
+            target = target.component;
+
+            if (target) {
+                target.editable(true, true);
+            }
+        });
+
+        /*
+        document.addEventListener("keypress", function (event) {
+            console.log('keypress');
+            console.log(event.target);
+            var target = _this.selected[0];
+            target.editable(true, true);
+        });
+        */
 
         this.tbody.addEventListener("mousedown", function (event) {
-            var target = event.target, cellIdx = {},
+            var target = event.target,
+                lastTargetNode = event.target,
+                cellIdx = {},
                 moveStart, moveLast,
                 fnmmove, fnmup;
 
@@ -315,17 +350,20 @@ defcomponent GRID2:
                 fnmmove = function (event) {
                     var target = event.target;
 
+                    if (target === lastTargetNode) return;
+                    lastTargetNode = target;
+
                     while ( !target.component && target !== this)
                         target = target.parentNode;
                     target = target.component;
 
-                    if (target && target !== moveLast) {
+                    if (target) {
                         _this.selected = selectMatrix(cellIdx, moveStart, target, moveLast);
                         moveLast = target;
-                    }
-                    event.preventDefault();
-                    event.stopPropagation();
 
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
                 }
                 _this.tbody.addEventListener("mousemove", fnmmove);
 
@@ -335,34 +373,28 @@ defcomponent GRID2:
                 }
                 document.addEventListener("mouseup", fnmup);
 
-                grid.queryMembers("*/advCell").callFn(function () {
+                _this.queryMembers("*/advCell").callFn(function () {
                     cellIdx[ this.nick ] = this;
                 });
             }
         });
     };
 
-    this.appendRow = function (record) {
-        var row = engine.createComponent("DROW.row", [ "vheadCell", "advCell", 5, this.members.length ]);
-        this.tbody.appendChild(row.node);
-        this.members.push(row);
-        row.queryMembers('#first').callFn("value", this.members.length -1);
+    this.addRow = function (numbers) {
+        var i, row;
+        numbers = numbers || 1;
+
+        for (i = 0; i < numbers; i++) {
+            row = engine.createComponent("DROW.row", [ "vheadCell", "advCell", this.members[0].members.length - 1, this.members.length ]);
+            this.tbody.appendChild(row.node);
+            this.members.push(row);
+            row.queryMembers('#first').callFn("value", this.members.length -1);
+        }
     };
 
-    this.removeRow = function (rowIndex) {
-        var row = this.members.splice(+rowIndex +1, 1)[0];
-        row.node.parentNode.removeChild(row.node);
-    };
 }~
 
-alias GRID3 GRID2("NAME PHONE ADDR");
-alias GRID4 GRID2("PHONE ADDR NAME");
-
 defrule setWidth {
-    */*: width("1px");
-}
-
-defrule setWidth2 {
     #head/.other: width("80px");
     #head/#first: width("20px");
 }
@@ -372,23 +404,8 @@ defrule setColor (color) {
     */PHONE: color("green");
 }
 
-defrule setHead {
-    #head/#A: value("A");
-    #head/#B: value("B");
-    #head/#C: value("C");
-    #head/#D: value("D");
-    #head/#E: value("E");
-    #head/#F: value("F");
-}
-
 defrun {
-    window.grid = engine.createComponent("GRID3");;
-    document.body.appendChild(grid.node);
-    grid.appendRow({NAME: 'San', PHONE: 123});
-    grid.appendRow({NAME: 'Sam', PHONE: 58775890});
-    grid.appendRow({NAME: 'Sam', PHONE: 58775891});
-    grid.appendRow({NAME: 'Sam', PHONE: 58775892});
-    engine.rules.setWidth.apply(grid);
-    engine.rules.setWidth2.apply(grid);
-    engine.rules.setHead.apply(grid);
+    window.grid2 = engine.createComponent("GRID2", [8, 16]);;
+    document.body.appendChild(grid2.node);
+    engine.rules.setWidth.apply(grid2);
 }~

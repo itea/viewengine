@@ -65,6 +65,7 @@ defcomponent ajaxLoad:
             button.value = e;
             button.addEventListener("click", function (event) {
                 load( this.value );
+                this.disabled = true;
             });
             _this.node.appendChild(button);
         });
